@@ -1,8 +1,17 @@
+export interface ApiResponse<T> {
+    status: number;
+    message: string;
+    data: T;
+    errors: Record<string, string> | null;
+}
+
+
+
 export interface Task {
     taskId: number;
     columnId: number;
-    title: string;
-    description: string;
+    title: string | null;
+    description: string | null;
     position: number
 
 }
@@ -20,6 +29,6 @@ export interface BoardColumn {
 export interface Board {
     id: number;
     name: string;
-    BoardColumns: BoardColumn[];
+    BoardColumnsResponseList: BoardColumn[];
 
 }
