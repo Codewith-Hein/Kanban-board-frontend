@@ -17,7 +17,7 @@ export interface Task {
 }
 
 
-export interface BoardColumn {
+export interface Column {
     columnId: number;
     boardId: number;
     title: string;
@@ -29,6 +29,6 @@ export interface BoardColumn {
 export interface Board {
     id: number;
     name: string;
-    BoardColumnsResponseList: BoardColumn[];
+    boardColumnResponseList: Column[];
 
 }

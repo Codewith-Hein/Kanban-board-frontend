@@ -1,7 +1,7 @@
-import type { BoardColumn } from "../types/Kanban";
+import type { Column } from "../types/Kanban";
 import Task from "./Task";
 
-const BoardColumn = ({ column }: { column: BoardColumn }) => {
+const BoardColumn = ({ column }: { column: Column }) => {
   return (
     <div>
       <h1>{column.title}</h1>

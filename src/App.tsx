@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
-import type { Board } from "./types/Kanban";
-import KanbanBoard from "./components/KanbanBoard";
+import { useEffect, useState } from "react";
+import TaskCreateForm from "./components/TaskCreateForm";
 import { getBoardByid } from "./service/boardApi";
+import type { Board } from "./types/Kanban";
 const App = () => {
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,8 +27,9 @@ const App = () => {
   if (!board) return <p>Board not found.</p>;
 
   return (
-    <div>
-      <KanbanBoard board={board} />
+    <div style={{ padding: 25 }}>
+      <TaskCreateForm />
+      {/* <KanbanBoard board={board} /> */}
     </div>
   );
 };
