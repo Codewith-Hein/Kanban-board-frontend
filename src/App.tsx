@@ -2,7 +2,13 @@ import React, { useEffect, useState } from "react";
 
 import { MoreOutlined, ProjectOutlined } from "@ant-design/icons";
 import { Dropdown, Input, Layout, Menu, message, Modal, theme } from "antd";
-import { createBoard, getAllBoards, getByBoardId } from "./api/boardApi";
+import {
+  createBoard,
+  deleteBoard,
+  getAllBoards,
+  getByBoardId,
+  updateBoard,
+} from "./api/boardApi";
 import BoardHeader from "./components/BoardHeader";
 import type { BoardDetail, BoardSummary } from "./types/Kanban";
 
@@ -21,8 +27,17 @@ const App: React.FC = () => {
   const [boardList, setBoardList] = useState<BoardSummary[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
   const [currentBoard, setCurrentBoard] = useState<BoardDetail | null>(null);
+  const [editBoard, setEditBoard] = useState<BoardSummary | null>(null);
 
-  const showModal = () => {
+  const showCreateModal = () => {
+    setEditBoard(null);
+    setBoardNameInput("");
+    setIsModalOpen(true);
+  };
+
+  const showEditModel = (board: BoardSummary) => {
+    setEditBoard(board);
+    setBoardNameInput(board.name);
     setIsModalOpen(true);
   };
 
@@ -34,13 +49,31 @@ const App: React.FC = () => {
 
     try {
       setLoading(true);
-      const data = await createBoard({ name: boardNameInput.trim() });
-      setBoardList((prev) => [...prev, data]);
-      message.success("Board Create Successful");
+
+      if (editBoard) {
+        const updated = await updateBoard(editBoard.id, {
+          name: boardNameInput.trim(),
+        });
+
+        setBoardList((prev) =>
+          prev.map((b) => (b.id === updated.id ? updated : b)),
+        );
+        if (currentBoard && currentBoard.id === updated.id) {
+          setCurrentBoard({ ...currentBoard, name: updated.name });
+        }
+        message.success("Board Updated Successfully");
+      } else {
+        const data = await createBoard({ name: boardNameInput.trim() });
+        setBoardList((prev) => [...prev, data]);
+        message.success("Board Create Successful");
+      }
       setBoardNameInput("");
+      setEditBoard(null);
       setIsModalOpen(false);
     } catch (error) {
-      message.error("fail to create board");
+      message.error(
+        editBoard ? "fail to updated Board " : "fail to create board",
+      );
       console.log(error);
     } finally {
       setLoading(false);
@@ -50,6 +83,22 @@ const App: React.FC = () => {
   const handleCancel = () => {
     setIsModalOpen(false);
     setBoardNameInput("");
+    setEditBoard(null);
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteBoard(id);
+      setBoardList((prev) => prev.filter((b) => b.id !== id));
+      if (selectedBoardId == id) {
+        setSelectedBoardId(null);
+        setCurrentBoard(null);
+      }
+      message.success("delete board success");
+    } catch (error) {
+      message.error("fail to delete a board");
+      console.log(error);
+    }
   };
 
   const fetchBoard = async () => {
@@ -119,9 +168,20 @@ const App: React.FC = () => {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    width: "100%",
                   }}
                 >
-                  <span>{board.name}</span>
+                  <span
+                    style={{
+                      flex: 1,
+                      minWidth: 0, // REQUIRED in Flexbox so the span is allowed to shrink!
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {board.name}
+                  </span>
                   <Dropdown
                     trigger={["click"]}
                     menu={{
@@ -129,6 +189,16 @@ const App: React.FC = () => {
                         { key: "edit", label: "Edit" },
                         { key: "delete", label: "Delete", danger: true },
                       ],
+                      onClick: (info) => {
+                        info.domEvent.stopPropagation();
+                        if (info.key === "edit") {
+                          showEditModel(board);
+                        } else if (info.key === "delete") {
+                          handleDelete(board.id);
+                        } else {
+                          showCreateModal();
+                        }
+                      },
                     }}
                   >
                     <MoreOutlined onClick={(e) => e.stopPropagation()} />
@@ -142,7 +212,7 @@ const App: React.FC = () => {
           <BoardHeader
             collapsed={collapsed}
             onToggleCollapse={() => setCollapsed(!collapsed)}
-            onOpenCreateModal={showModal}
+            onOpenCreateModal={showCreateModal}
           />
 
           <Content
@@ -167,7 +237,7 @@ const App: React.FC = () => {
       </Layout>
 
       <Modal
-        title="Create Board"
+        title={editBoard ? "update board" : "create board"}
         closable={{ "aria-label": "Custom Close Button" }}
         open={isModalOpen}
         onOk={handleOk}
