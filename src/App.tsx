@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import { MoreOutlined, ProjectOutlined } from "@ant-design/icons";
-import { Dropdown, Input, Layout, Menu, message, Modal, theme } from "antd";
+import { Dropdown, Input, Layout, Menu, message, Modal } from "antd";
 import {
   createBoard,
   deleteBoard,
@@ -11,15 +11,12 @@ import {
 } from "./api/boardApi";
 import BoardHeader from "./components/BoardHeader";
 import type { BoardDetail, BoardSummary } from "./types/Kanban";
+import BoardView from "./components/BoardView";
 
-const { Sider, Content } = Layout;
+const { Sider } = Layout;
 
 const App: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-
-  const {
-    token: { colorBgContainer, borderRadiusLG },
-  } = theme.useToken();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [boardNameInput, setBoardNameInput] = useState<string>("");
@@ -195,8 +192,6 @@ const App: React.FC = () => {
                           showEditModel(board);
                         } else if (info.key === "delete") {
                           handleDelete(board.id);
-                        } else {
-                          showCreateModal();
                         }
                       },
                     }}
@@ -215,24 +210,7 @@ const App: React.FC = () => {
             onOpenCreateModal={showCreateModal}
           />
 
-          <Content
-            style={{
-              margin: "24px 16px",
-              padding: 24,
-              minHeight: 280,
-              background: colorBgContainer,
-              borderRadius: borderRadiusLG,
-            }}
-          >
-            {currentBoard ? (
-              <div>
-                <h2>{currentBoard.name}</h2>
-                <p>Board ID :{currentBoard.id}</p>
-              </div>
-            ) : (
-              <p>Please Select a board from Menu</p>
-            )}
-          </Content>
+          <BoardView boardData={currentBoard} />
         </Layout>
       </Layout>
 
