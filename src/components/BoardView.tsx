@@ -1,18 +1,21 @@
-import { Layout, message } from "antd";
-import BoardColumn from "./BoardColumn";
-import { Button, Modal, Input } from "antd";
-import { theme } from "antd";
-import type { BoardColumnType, BoardDetail } from "../types/Kanban";
+import { Button, Input, Layout, message, Modal, theme } from "antd";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { createBoardColumn } from "../api/columnApi";
+import {
+  createBoardColumn,
+  deleteBoardColumn,
+  updateBoardColumn,
+} from "../api/columnApi";
+import type { BoardColumnType, BoardDetail } from "../types/Kanban";
+import BoardColumn from "./BoardColumn";
+
+const { Content } = Layout;
 
 interface BoardViewProps {
-  boardData: BoardDetail | null;
+  currentBoard: BoardDetail | null;
 }
 
-const BoardView: React.FC<BoardViewProps> = ({ boardData }) => {
-  const { Content } = Layout;
+const BoardView: React.FC<BoardViewProps> = ({ currentBoard }) => {
   const {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken();
@@ -20,40 +23,93 @@ const BoardView: React.FC<BoardViewProps> = ({ boardData }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [columnNameInput, setColumnNameInput] = useState<string>("");
-  const [columnList, setColumnList] = useState<BoardColumnType>([]);
+  const [columnList, setColumnList] = useState<BoardColumnType[]>([]);
+  const [editColumn, setEditColumn] = useState<BoardColumnType | null>(null);
 
   const openModel = () => {
+    setEditColumn(null);
     setIsModalOpen(true);
     setColumnNameInput("");
   };
 
+  const showEditModel = (editColumn: BoardColumnType) => {
+    setIsModalOpen(true);
+    setEditColumn(editColumn);
+    setColumnNameInput(editColumn?.title);
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteBoardColumn(id);
+      setColumnList((prev) => prev.filter((p) => p.columnId !== id));
+      message.success("delete column successful");
+    } catch (error) {
+      message.error("fail to delete column");
+      console.log(error);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    setColumnNameInput("");
+    setEditColumn(null);
+  };
+
   const handleOk = async () => {
-    if (!columnNameInput.trim) {
+    if (!columnNameInput.trim() || !currentBoard) {
       message.warning("column name is required");
       return;
     }
 
     try {
       setLoading(true);
-      setIsModalOpen(false);
 
-      const data = await createBoardColumn();
+      if (editColumn) {
+        const updated = await updateBoardColumn(editColumn.columnId, {
+          title: columnNameInput.trim(),
+          position: editColumn.position,
+        });
+
+        setColumnList((prev) =>
+          prev.map((col) =>
+            col.columnId === editColumn.columnId
+              ? { ...col, title: updated.title, position: updated.position } // Keeps columnId & tasks, updates title!
+              : col,
+          ),
+        );
+        message.success("Column updated successfully");
+      } else {
+        const newColumn = await createBoardColumn({
+          boardId: currentBoard?.id,
+          title: columnNameInput.trim(),
+          position: columnList.length + 1,
+        });
+
+        setColumnList((prev) => [...prev, newColumn]);
+        message.success("Column created successfully");
+      }
+
+      setColumnNameInput("");
+      setIsModalOpen(false);
+      setEditColumn(null);
     } catch (error) {
-      message.error("fail create column");
+      message.error(
+        editColumn ? "fail to update column" : "fail to create column",
+      );
       console.log(error);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (boardData) {
-      setColumnList(boardData.boardColumnResponseList || []);
-    }
-  }, [boardData]);
-
-  const handleCancel = () => {};
+    setColumnList(
+      currentBoard ? currentBoard.boardColumnResponseList || [] : [],
+    );
+  }, [currentBoard]);
 
   return (
-    <div>
+    <>
       <Content
         style={{
           margin: "24px 16px",
@@ -64,7 +120,7 @@ const BoardView: React.FC<BoardViewProps> = ({ boardData }) => {
           overflowX: "auto",
         }}
       >
-        {boardData ? (
+        {currentBoard ? (
           <div>
             <div
               style={{
@@ -74,22 +130,26 @@ const BoardView: React.FC<BoardViewProps> = ({ boardData }) => {
               }}
             >
               <div>
-                <h2>{boardData.name}</h2>
-                <p>Board ID :{boardData.id}</p>
+                <h2>{currentBoard.name}</h2>
+                <p>Board ID :{currentBoard.id}</p>
               </div>
 
               <Button type="primary" onClick={openModel}>
                 + Create Column
               </Button>
             </div>
-            <BoardColumn />
+            <BoardColumn
+              columnList={columnList}
+              editModel={showEditModel}
+              handleDelete={handleDelete}
+            />
           </div>
         ) : (
           <p>Please Select a board from Menu</p>
         )}
       </Content>
       <Modal
-        title="title"
+        title={editColumn ? "Edit Column" : "Create Column"}
         closable={{ "aria-label": "Custom Close Button" }}
         open={isModalOpen}
         onOk={handleOk}
@@ -97,12 +157,12 @@ const BoardView: React.FC<BoardViewProps> = ({ boardData }) => {
         confirmLoading={loading}
       >
         <Input
-          placeholder="Enter Board Name"
+          placeholder="Enter Column Name"
           value={columnNameInput}
           onChange={(e) => setColumnNameInput(e.target.value)}
         />
       </Modal>
-    </div>
+    </>
   );
 };
 

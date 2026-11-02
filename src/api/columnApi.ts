@@ -1,5 +1,5 @@
 import type {
-  BoardColumn,
+  BoardColumnType,
   CreateBoardColumnRequest,
   UpdateBoardColumnRequest,
   UpdateBoardColumnResponse,
@@ -8,15 +8,15 @@ import { axiosClient } from "./axiosClient";
 
 export const createBoardColumn = async (
   data: CreateBoardColumnRequest,
-): Promise<BoardColumn> => {
-  const response = await axiosClient.post("/board-column", data);
+): Promise<BoardColumnType> => {
+  const response = await axiosClient.post("/board-columns", data);
   return response.data;
 };
 
 export const getColumnByBoardId = async (
   id: number,
-): Promise<BoardColumn[]> => {
-  const response = await axiosClient.get(`/board-column/${id}`);
+): Promise<BoardColumnType[]> => {
+  const response = await axiosClient.get(`/board-columns/${id}`);
   return response.data;
 };
 
@@ -24,11 +24,11 @@ export const updateBoardColumn = async (
   id: number,
   data: UpdateBoardColumnRequest,
 ): Promise<UpdateBoardColumnResponse> => {
-  const response = await axiosClient.put(`/board-column/${id}`, data);
+  const response = await axiosClient.put(`/board-columns/${id}`, data);
   return response.data;
 };
 
 export const deleteBoardColumn = async (id: number): Promise<void> => {
-  const response = await axiosClient.delete(`/board-column/${id}`);
+  const response = await axiosClient.delete(`/board-columns/${id}`);
   return response.data;
 };

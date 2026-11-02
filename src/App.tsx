@@ -10,8 +10,8 @@ import {
   updateBoard,
 } from "./api/boardApi";
 import BoardHeader from "./components/BoardHeader";
-import type { BoardDetail, BoardSummary } from "./types/Kanban";
 import BoardView from "./components/BoardView";
+import type { BoardDetail, BoardSummary } from "./types/Kanban";
 
 const { Sider } = Layout;
 
@@ -210,7 +210,7 @@ const App: React.FC = () => {
             onOpenCreateModal={showCreateModal}
           />
 
-          <BoardView boardData={currentBoard} />
+          <BoardView currentBoard={currentBoard} />
         </Layout>
       </Layout>
 
