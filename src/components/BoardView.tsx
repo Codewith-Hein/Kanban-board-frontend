@@ -6,7 +6,7 @@ import {
   deleteBoardColumn,
   updateBoardColumn,
 } from "../api/columnApi";
-import type { BoardColumnType, BoardDetail } from "../types/Kanban";
+import type { BoardColumnType, BoardDetail, Task } from "../types/Kanban";
 import BoardColumn from "./BoardColumn";
 
 const { Content } = Layout;
@@ -53,6 +53,16 @@ const BoardView: React.FC<BoardViewProps> = ({ currentBoard }) => {
     setIsModalOpen(false);
     setColumnNameInput("");
     setEditColumn(null);
+  };
+
+  const handleTaskCreated = (newTask: Task) => {
+    setColumnList((prev) =>
+      prev.map((col) =>
+        col.columnId === newTask.columnId
+          ? { ...col, tasks: [...(col.tasks || []), newTask] }
+          : col,
+      ),
+    );
   };
 
   const handleOk = async () => {
@@ -103,9 +113,11 @@ const BoardView: React.FC<BoardViewProps> = ({ currentBoard }) => {
   };
 
   useEffect(() => {
-    setColumnList(
-      currentBoard ? currentBoard.boardColumnResponseList || [] : [],
-    );
+    if (currentBoard && currentBoard.boardColumnResponseList) {
+      setColumnList(currentBoard.boardColumnResponseList);
+    } else {
+      setColumnList([]);
+    }
   }, [currentBoard]);
 
   return (
@@ -142,6 +154,7 @@ const BoardView: React.FC<BoardViewProps> = ({ currentBoard }) => {
               columnList={columnList}
               editModel={showEditModel}
               handleDelete={handleDelete}
+              onTaskCreated={handleTaskCreated}
             />
           </div>
         ) : (
