@@ -1,4 +1,4 @@
-import { Button, Input, Layout, message, Modal, theme } from "antd";
+import { Button, Input, Layout, message, Modal, Spin, theme } from "antd";
 import type React from "react";
 import { useEffect, useState } from "react";
 import {
@@ -13,9 +13,13 @@ const { Content } = Layout;
 
 interface BoardViewProps {
   currentBoard: BoardDetail | null;
+  boardLoading: boolean;
 }
 
-const BoardView: React.FC<BoardViewProps> = ({ currentBoard }) => {
+const BoardView: React.FC<BoardViewProps> = ({
+  currentBoard,
+  boardLoading,
+}) => {
   const {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken();
@@ -132,7 +136,9 @@ const BoardView: React.FC<BoardViewProps> = ({ currentBoard }) => {
           overflowX: "auto",
         }}
       >
-        {currentBoard ? (
+        {boardLoading ? (
+          <Spin />
+        ) : currentBoard ? (
           <div>
             <div
               style={{

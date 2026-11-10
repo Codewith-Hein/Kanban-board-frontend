@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
   const [currentBoard, setCurrentBoard] = useState<BoardDetail | null>(null);
   const [editBoard, setEditBoard] = useState<BoardSummary | null>(null);
+  const [boardLoading, setBoardLoading] = useState<boolean>(false);
 
   const showCreateModal = () => {
     setEditBoard(null);
@@ -112,12 +113,15 @@ const App: React.FC = () => {
   };
 
   const fetchBoardById = async (id: number) => {
+    setBoardLoading(true);
     try {
       const data = await getByBoardId(id);
       setCurrentBoard(data);
     } catch (error) {
       message.error("fail to fetchBoardById");
       console.log(error);
+    } finally {
+      setBoardLoading(false);
     }
   };
 
@@ -210,7 +214,7 @@ const App: React.FC = () => {
             onOpenCreateModal={showCreateModal}
           />
 
-          <BoardView currentBoard={currentBoard} />
+          <BoardView currentBoard={currentBoard} boardLoading={boardLoading} />
         </Layout>
       </Layout>
 
