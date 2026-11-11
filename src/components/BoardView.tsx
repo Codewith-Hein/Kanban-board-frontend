@@ -41,6 +41,15 @@ const BoardView: React.FC<BoardViewProps> = ({
     setEditColumn(editColumn);
     setColumnNameInput(editColumn?.title);
   };
+  const handleTaskDeleted = (taskId: number) => {
+    setColumnList((prev) =>
+      prev.map((col) => ({
+        ...col,
+        // Keep all tasks EXCEPT the one we just deleted
+        tasks: (col.tasks || []).filter((task) => task.taskId !== taskId),
+      })),
+    );
+  };
 
   const handleDelete = async (id: number) => {
     try {
@@ -161,6 +170,7 @@ const BoardView: React.FC<BoardViewProps> = ({
               editModel={showEditModel}
               handleDelete={handleDelete}
               onTaskCreated={handleTaskCreated}
+              handleTaskDelete={handleTaskDeleted}
             />
           </div>
         ) : (

@@ -1,4 +1,4 @@
-import { MoreOutlined } from "@ant-design/icons";
+import { ExclamationCircleFilled, MoreOutlined } from "@ant-design/icons";
 import {
   Button,
   Card,
@@ -10,8 +10,8 @@ import {
   Tag,
 } from "antd";
 import React, { useState } from "react";
+import { createTask, deleteTask } from "../api/taskApi";
 import type { BoardColumnType, Priority, Task } from "../types/Kanban";
-import { createTask } from "../api/taskApi";
 
 const { TextArea } = Input;
 
@@ -19,7 +19,8 @@ interface BoardColumnProps {
   columnList: BoardColumnType[];
   editModel: (column: BoardColumnType) => void;
   handleDelete: (id: number) => void;
-  onTaskCreated: (newTask: Task) => void; // <-- 1. Receive the prop
+  onTaskCreated: (newTask: Task) => void;
+  handleTaskDelete: (id: number) => void;
 }
 
 const BoardColumn: React.FC<BoardColumnProps> = ({
@@ -27,6 +28,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
   editModel,
   handleDelete,
   onTaskCreated,
+  handleTaskDelete,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModelOpen] = useState(false);
@@ -35,6 +37,17 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
   const [priority, setPriority] = useState<Priority>("LOW");
   const [taskTitle, setTaskTitle] = useState<string>("");
   const [taskDesc, setTaskDesc] = useState<string>("");
+
+  const handleDeleteTask = async (id: number) => {
+    try {
+      await deleteTask(id);
+      message.success("task delete successful");
+      handleTaskDelete(id);
+    } catch (error) {
+      message.error("fail to delete a task");
+      console.log(error);
+    }
+  };
 
   const handleOk = async () => {
     if (!taskTitle.trim() || selectedColumnId === null) {
@@ -120,7 +133,17 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                     if (info.key === "edit") {
                       editModel(column);
                     } else if (info.key === "delete") {
-                      handleDelete(column.columnId);
+                      Modal.confirm({
+                        title: "Delete Column",
+                        icon: <ExclamationCircleFilled />,
+                        content: `Are you sure you want to delete "${column.title}"`,
+                        okText: "Yes, Delete",
+                        okType: "danger",
+                        cancelText: "Cancel",
+                        onOk: () => {
+                          handleDelete(column.columnId);
+                        },
+                      });
                     }
                   },
                 }}
@@ -142,6 +165,35 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                 size="small"
                 variant="borderless"
                 style={{ marginBottom: 10, background: "#fff" }}
+                extra={
+                  <Dropdown
+                    trigger={["hover"]}
+                    menu={{
+                      items: [
+                        { key: "edit", label: "edit" },
+                        { key: "delete", label: "delete", danger: true },
+                      ],
+                      onClick: (info) => {
+                        if (info.key === "edit") {
+                        } else if (info.key === "delete") {
+                          Modal.confirm({
+                            title: "Delete task",
+                            icon: <ExclamationCircleFilled />,
+                            content: `Are you sure you want to delete "${task.title}"`,
+                            okText: "Yes, Delete",
+                            okType: "danger",
+                            cancelText: "Cancel",
+                            onOk: () => {
+                              handleDeleteTask(task.taskId);
+                            },
+                          });
+                        }
+                      },
+                    }}
+                  >
+                    <MoreOutlined style={{ cursor: "pointer" }} />
+                  </Dropdown>
+                }
               >
                 <div
                   style={{

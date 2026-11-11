@@ -1,6 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
-import { MoreOutlined, ProjectOutlined } from "@ant-design/icons";
+import {
+  ExclamationCircleFilled,
+  MoreOutlined,
+  ProjectOutlined,
+} from "@ant-design/icons";
 import { Dropdown, Input, Layout, Menu, message, Modal } from "antd";
 import {
   createBoard,
@@ -26,6 +30,8 @@ const App: React.FC = () => {
   const [currentBoard, setCurrentBoard] = useState<BoardDetail | null>(null);
   const [editBoard, setEditBoard] = useState<BoardSummary | null>(null);
   const [boardLoading, setBoardLoading] = useState<boolean>(false);
+
+  const requestId = useRef(0);
 
   const showCreateModal = () => {
     setEditBoard(null);
@@ -113,15 +119,23 @@ const App: React.FC = () => {
   };
 
   const fetchBoardById = async (id: number) => {
+    requestId.current += 1;
+    const currentRequestId = requestId.current;
     setBoardLoading(true);
     try {
       const data = await getByBoardId(id);
-      setCurrentBoard(data);
+      if (currentRequestId === requestId.current) {
+        setCurrentBoard(data);
+      }
     } catch (error) {
-      message.error("fail to fetchBoardById");
+      if (currentRequestId === requestId.current) {
+        message.error("fail to fetchBoardById");
+      }
       console.log(error);
     } finally {
-      setBoardLoading(false);
+      if (currentRequestId === requestId.current) {
+        setBoardLoading(false);
+      }
     }
   };
 
@@ -195,7 +209,17 @@ const App: React.FC = () => {
                         if (info.key === "edit") {
                           showEditModel(board);
                         } else if (info.key === "delete") {
-                          handleDelete(board.id);
+                          Modal.confirm({
+                            title: "Delete Board",
+                            icon: <ExclamationCircleFilled />,
+                            content: `Are you sure you want to delete the board "${board.name}"? Everything inside it will be permanently deleted.`,
+                            okText: "Yes, Delete Board",
+                            okType: "danger",
+                            cancelText: "Cancel",
+                            onOk: () => {
+                              handleDelete(board.id);
+                            },
+                          });
                         }
                       },
                     }}
