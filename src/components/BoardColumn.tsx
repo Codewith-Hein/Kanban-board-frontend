@@ -10,7 +10,7 @@ import {
   Tag,
 } from "antd";
 import React, { useState } from "react";
-import { createTask, deleteTask } from "../api/taskApi";
+import { createTask, deleteTask, updateTask } from "../api/taskApi";
 import type { BoardColumnType, Priority, Task } from "../types/Kanban";
 
 const { TextArea } = Input;
@@ -21,6 +21,7 @@ interface BoardColumnProps {
   handleDelete: (id: number) => void;
   onTaskCreated: (newTask: Task) => void;
   handleTaskDelete: (id: number) => void;
+  handleTaskUpdate: (updateTask: Task) => void;
 }
 
 const BoardColumn: React.FC<BoardColumnProps> = ({
@@ -29,6 +30,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
   handleDelete,
   onTaskCreated,
   handleTaskDelete,
+  handleTaskUpdate,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModelOpen] = useState(false);
@@ -37,16 +39,57 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
   const [priority, setPriority] = useState<Priority>("LOW");
   const [taskTitle, setTaskTitle] = useState<string>("");
   const [taskDesc, setTaskDesc] = useState<string>("");
+  const [editTask, setEditTask] = useState<Task | null>(null);
 
   const handleDeleteTask = async (id: number) => {
     try {
       await deleteTask(id);
-      message.success("task delete successful");
+      message.success("Task deleted successfully");
       handleTaskDelete(id);
     } catch (error) {
-      message.error("fail to delete a task");
+      message.error("Fail to delete a task");
       console.log(error);
     }
+  };
+
+  const handleTaskEdit = async (taskToEdit: Task) => {
+    // 1. Send the update to the backend
+    await updateTask(taskToEdit.taskId, {
+      title: taskTitle.trim(),
+      description: taskDesc.trim(),
+      position: taskToEdit.position,
+      priority: priority,
+    });
+
+    // 2. Manually construct the updated task for React using the form state!
+    const updatedTaskForUI: Task = {
+      ...taskToEdit, // Keeps the original taskId, columnId, etc.
+      title: taskTitle.trim(),
+      description: taskDesc.trim(),
+      priority: priority,
+    };
+
+    // 3. Send our perfectly shaped object to BoardView to update the screen
+    handleTaskUpdate(updatedTaskForUI);
+    message.success("Task updated successfully");
+  };
+
+  const handleTaskCreate = async () => {
+    const currentCol = columnList.find((c) => c.columnId === selectedColumnId);
+    const nextPosition = (currentCol?.tasks?.length || 0) + 1;
+
+    // 1. Call the API and capture the newly created task
+    const newTask = await createTask({
+      title: taskTitle.trim(),
+      description: taskDesc.trim(),
+      position: nextPosition,
+      columnId: selectedColumnId as number, // Guaranteed to be a number by this point
+      priority: priority,
+    });
+
+    // 2. Pass it to the UI
+    onTaskCreated(newTask);
+    message.success("Task created successfully");
   };
 
   const handleOk = async () => {
@@ -58,28 +101,21 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
     setLoading(true);
 
     try {
-      const currentCol = columnList.find(
-        (c) => c.columnId === selectedColumnId,
-      );
-      const nextPosition = (currentCol?.tasks?.length || 0) + 1;
+      if (editTask) {
+        await handleTaskEdit(editTask);
+      } else {
+        await handleTaskCreate();
+      }
 
-      const data = await createTask({
-        title: taskTitle.trim(),
-        description: taskDesc.trim(),
-        position: nextPosition,
-        columnId: selectedColumnId,
-        priority: priority,
-      });
-
-      onTaskCreated(data); // <-- 2. Send the new task up to BoardView to update the screen!
-      message.success("Task created successfully");
-
+      // Cleanup runs only if the await functions above succeed
       setIsModelOpen(false);
       setTaskTitle("");
       setTaskDesc("");
       setPriority("LOW");
+      setEditTask(null);
+      setSelectedColumnId(null);
     } catch (error) {
-      message.error("Fail to create task");
+      message.error(editTask ? "Fail to update task" : "Fail to create task");
       console.log(error);
     } finally {
       setLoading(false);
@@ -91,14 +127,28 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
     setTaskTitle("");
     setTaskDesc("");
     setPriority("LOW");
+    setEditTask(null);
+    setSelectedColumnId(null);
+  };
+
+  const openEditModal = (oldTask: Task, columnId: number) => {
+    setIsModelOpen(true);
+    setEditTask(oldTask);
+    setTaskTitle(oldTask.title ?? "");
+    setTaskDesc(oldTask.description ?? "");
+    setPriority(oldTask.priority);
+    setSelectedColumnId(columnId);
   };
 
   const onOpenCreateTask = (columnId: number) => {
     setSelectedColumnId(columnId);
     setIsModelOpen(true);
+    setEditTask(null);
+    setTaskTitle("");
+    setTaskDesc("");
+    setPriority("LOW");
   };
 
-  // Helper function for Tag colors
   const getPriorityColor = (prio: Priority) => {
     if (prio === "HIGH") return "volcano"; // A softer, more modern red in Ant Design
     if (prio === "MEDIUM") return "gold";
@@ -136,7 +186,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                       Modal.confirm({
                         title: "Delete Column",
                         icon: <ExclamationCircleFilled />,
-                        content: `Are you sure you want to delete "${column.title}"`,
+                        content: `Are you sure you want to delete "${column.title}"?`,
                         okText: "Yes, Delete",
                         okType: "danger",
                         cancelText: "Cancel",
@@ -158,7 +208,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
               background: "#f4f5f7",
             }}
           >
-            {/* 3. Render the Tasks! Loop over column.tasks */}
+            {/* Render the Tasks inside this Column */}
             {(column.tasks || []).map((task) => (
               <Card
                 key={task.taskId}
@@ -170,16 +220,17 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                     trigger={["hover"]}
                     menu={{
                       items: [
-                        { key: "edit", label: "edit" },
-                        { key: "delete", label: "delete", danger: true },
+                        { key: "edit", label: "Edit" },
+                        { key: "delete", label: "Delete", danger: true },
                       ],
                       onClick: (info) => {
                         if (info.key === "edit") {
+                          openEditModal(task, column.columnId);
                         } else if (info.key === "delete") {
                           Modal.confirm({
-                            title: "Delete task",
+                            title: "Delete Task",
                             icon: <ExclamationCircleFilled />,
-                            content: `Are you sure you want to delete "${task.title}"`,
+                            content: `Are you sure you want to delete "${task.title}"?`,
                             okText: "Yes, Delete",
                             okType: "danger",
                             cancelText: "Cancel",
@@ -238,7 +289,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
       </div>
 
       <Modal
-        title="Create Task"
+        title={editTask ? "Edit Task" : "Create Task"}
         closable={{ "aria-label": "Custom Close Button" }}
         open={isModalOpen}
         onOk={handleOk}

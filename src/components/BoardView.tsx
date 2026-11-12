@@ -78,6 +78,17 @@ const BoardView: React.FC<BoardViewProps> = ({
     );
   };
 
+  const handleTaskUpdate = (updateTask: Task) => {
+    setColumnList((prev) =>
+      prev.map((col) => ({
+        ...col,
+        tasks: (col.tasks || []).map((t) =>
+          t.taskId === updateTask.taskId ? updateTask : t,
+        ),
+      })),
+    );
+  };
+
   const handleOk = async () => {
     if (!columnNameInput.trim() || !currentBoard) {
       message.warning("column name is required");
@@ -171,6 +182,7 @@ const BoardView: React.FC<BoardViewProps> = ({
               handleDelete={handleDelete}
               onTaskCreated={handleTaskCreated}
               handleTaskDelete={handleTaskDeleted}
+              handleTaskUpdate={handleTaskUpdate}
             />
           </div>
         ) : (
