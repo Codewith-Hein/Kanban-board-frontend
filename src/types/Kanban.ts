@@ -33,6 +33,7 @@ export interface UpdateTaskRequest {
 
 export interface MoveTaskRequest {
     columnId: number;
+    position: number;~
 }
 
 export interface BoardColumnType {

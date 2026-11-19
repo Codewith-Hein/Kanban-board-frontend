@@ -8,6 +8,9 @@ import {
 } from "../api/columnApi";
 import type { BoardColumnType, BoardDetail, Task } from "../types/Kanban";
 import BoardColumn from "./BoardColumn";
+import { DragDropContext } from "@hello-pangea/dnd";
+import type { DropResult } from "@hello-pangea/dnd";
+import { moveTask } from "../api/taskApi"; // Don't forget to import your new API!
 
 const { Content } = Layout;
 
@@ -144,6 +147,65 @@ const BoardView: React.FC<BoardViewProps> = ({
     }
   }, [currentBoard]);
 
+  const handleDragEnd = async (result: DropResult) => {
+    const { source, destination, draggableId } = result;
+
+    // 1. If dropped outside a valid column, do nothing
+    if (!destination) return;
+
+    // 2. If dropped in the exact same spot, do nothing
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
+      return;
+    }
+
+    const sourceColId = Number(source.droppableId);
+    const destColId = Number(destination.droppableId);
+    const taskId = Number(draggableId);
+
+    // 3. Clone the arrays so we can mutate them safely
+    const newColumnList = [...columnList];
+    const sourceColIndex = newColumnList.findIndex(
+      (col) => col.columnId === sourceColId,
+    );
+    const destColIndex = newColumnList.findIndex(
+      (col) => col.columnId === destColId,
+    );
+
+    const sourceTasks = [...(newColumnList[sourceColIndex].tasks || [])];
+    const destTasks =
+      sourceColId === destColId
+        ? sourceTasks
+        : [...(newColumnList[destColIndex].tasks || [])];
+
+    // 4. Remove the task from its old position
+    const [movedTask] = sourceTasks.splice(source.index, 1);
+
+    // 5. Insert the task into its new position
+    destTasks.splice(destination.index, 0, movedTask);
+
+    // 6. Update the React state instantly (Optimistic UI Update)
+    newColumnList[sourceColIndex].tasks = sourceTasks;
+    if (sourceColId !== destColId) {
+      newColumnList[destColIndex].tasks = destTasks;
+    }
+    setColumnList(newColumnList);
+
+    // 7. Tell Spring Boot about the move in the background
+    try {
+      await moveTask(taskId, {
+        columnId: destColId,
+        position: destination.index + 1,
+      });
+    } catch (error) {
+      message.error("Failed to move task on the server.");
+      console.log(error);
+      // If you want to be extra safe, you could reload the board here if it fails!
+    }
+  };
+
   return (
     <>
       <Content
@@ -176,14 +238,16 @@ const BoardView: React.FC<BoardViewProps> = ({
                 + Create Column
               </Button>
             </div>
-            <BoardColumn
-              columnList={columnList}
-              editModel={showEditModel}
-              handleDelete={handleDelete}
-              onTaskCreated={handleTaskCreated}
-              handleTaskDelete={handleTaskDeleted}
-              handleTaskUpdate={handleTaskUpdate}
-            />
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <BoardColumn
+                columnList={columnList}
+                editModel={showEditModel}
+                handleDelete={handleDelete}
+                onTaskCreated={handleTaskCreated}
+                handleTaskDelete={handleTaskDeleted}
+                handleTaskUpdate={handleTaskUpdate}
+              />
+            </DragDropContext>
           </div>
         ) : (
           <p>Please Select a board from Menu</p>

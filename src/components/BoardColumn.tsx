@@ -12,6 +12,7 @@ import {
 import React, { useState } from "react";
 import { createTask, deleteTask, updateTask } from "../api/taskApi";
 import type { BoardColumnType, Priority, Task } from "../types/Kanban";
+import { Droppable, Draggable } from "@hello-pangea/dnd";
 
 const { TextArea } = Input;
 
@@ -209,72 +210,117 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
             }}
           >
             {/* Render the Tasks inside this Column */}
-            {(column.tasks || []).map((task) => (
-              <Card
-                key={task.taskId}
-                size="small"
-                variant="borderless"
-                style={{ marginBottom: 10, background: "#fff" }}
-                extra={
-                  <Dropdown
-                    trigger={["hover"]}
-                    menu={{
-                      items: [
-                        { key: "edit", label: "Edit" },
-                        { key: "delete", label: "Delete", danger: true },
-                      ],
-                      onClick: (info) => {
-                        if (info.key === "edit") {
-                          openEditModal(task, column.columnId);
-                        } else if (info.key === "delete") {
-                          Modal.confirm({
-                            title: "Delete Task",
-                            icon: <ExclamationCircleFilled />,
-                            content: `Are you sure you want to delete "${task.title}"?`,
-                            okText: "Yes, Delete",
-                            okType: "danger",
-                            cancelText: "Cancel",
-                            onOk: () => {
-                              handleDeleteTask(task.taskId);
-                            },
-                          });
-                        }
-                      },
-                    }}
-                  >
-                    <MoreOutlined style={{ cursor: "pointer" }} />
-                  </Dropdown>
-                }
-              >
+            {/* --- DROPPABLE AREA START --- */}
+            <Droppable droppableId={String(column.columnId)}>
+              {(provided) => (
                 <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                  }}
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  style={{ minHeight: "10px" }} // Ensures you can drop into an empty column!
                 >
-                  <strong>{task.title}</strong>
+                  {(column.tasks || []).map((task, index) => (
+                    /* --- DRAGGABLE TASK START --- */
+                    <Draggable
+                      key={String(task.taskId)}
+                      draggableId={String(task.taskId)}
+                      index={index}
+                    >
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          style={{
+                            ...provided.draggableProps.style,
+                            opacity: snapshot.isDragging ? 0.8 : 1, // Cool visual effect when dragging
+                          }}
+                        >
+                          {/* YOUR EXISTING TASK CARD */}
+                          <Card
+                            size="small"
+                            variant="borderless"
+                            style={{
+                              marginBottom: 10,
+                              background: "#fff",
+                              boxShadow: snapshot.isDragging
+                                ? "0 5px 15px rgba(0,0,0,0.15)"
+                                : "none", // Adds a shadow when picked up
+                            }}
+                            extra={
+                              <Dropdown
+                                trigger={["hover"]}
+                                menu={{
+                                  items: [
+                                    { key: "edit", label: "Edit" },
+                                    {
+                                      key: "delete",
+                                      label: "Delete",
+                                      danger: true,
+                                    },
+                                  ],
+                                  onClick: (info) => {
+                                    if (info.key === "edit") {
+                                      openEditModal(task, column.columnId);
+                                    } else if (info.key === "delete") {
+                                      Modal.confirm({
+                                        title: "Delete task",
+                                        icon: <ExclamationCircleFilled />,
+                                        content: `Are you sure you want to delete "${task.title}"?`,
+                                        okText: "Yes, Delete",
+                                        okType: "danger",
+                                        cancelText: "Cancel",
+                                        onOk: () => {
+                                          handleDeleteTask(task.taskId);
+                                        },
+                                      });
+                                    }
+                                  },
+                                }}
+                              >
+                                <MoreOutlined style={{ cursor: "pointer" }} />
+                              </Dropdown>
+                            }
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                              }}
+                            >
+                              <strong>{task.title}</strong>
+                            </div>
+                            {task.description && (
+                              <p
+                                style={{
+                                  color: "#666",
+                                  fontSize: "13px",
+                                  marginTop: 4,
+                                  marginBottom: 8,
+                                }}
+                              >
+                                {task.description}
+                              </p>
+                            )}
+                            <Tag
+                              color={getPriorityColor(task.priority)}
+                              style={{ marginTop: 4 }}
+                            >
+                              {task.priority}
+                            </Tag>
+                          </Card>
+                        </div>
+                      )}
+                    </Draggable>
+                    /* --- DRAGGABLE TASK END --- */
+                  ))}
+
+                  {/* Required by the library to make room when dropping */}
+                  {provided.placeholder}
                 </div>
-                {task.description && (
-                  <p
-                    style={{
-                      color: "#666",
-                      fontSize: "13px",
-                      marginTop: 4,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {task.description}
-                  </p>
-                )}
-                <Tag
-                  color={getPriorityColor(task.priority)}
-                  style={{ marginTop: 4 }}
-                >
-                  {task.priority}
-                </Tag>
-              </Card>
-            ))}
+              )}
+            </Droppable>
+            {/* --- DROPPABLE AREA END --- */}
 
             <Button
               block

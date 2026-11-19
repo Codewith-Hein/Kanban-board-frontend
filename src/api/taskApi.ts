@@ -1,6 +1,7 @@
 import type {
   BaseResponse,
   CreateTaskRequest,
+  MoveTaskRequest,
   Task,
   UpdateTaskRequest,
 } from "../types/Kanban";
@@ -16,9 +17,9 @@ export const getAllTask = async (): Promise<Task[]> => {
   return response.data.data;
 };
 
-export const moveTask = async (id: number): Promise<Task> => {
+export const moveTask = async (id: number, data: MoveTaskRequest): Promise<Task> => {
   const response = await axiosClient.put<BaseResponse<Task>>(
-    `/tasks/${id}/move`,
+    `/tasks/${id}/move`, data
   );
   return response.data.data;
 };
