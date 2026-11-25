@@ -3,3 +3,205 @@
   padding: 0;
   box-sizing: border-box;
 }
+
+html,
+body,
+#root {
+  height: 100%;
+  background-color: #ffffff;
+  color: #0a0a0a;
+  font-family:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Monochrome scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fafafa;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #737373;
+}
+
+/* White sidebar menu styling with black text */
+.kanban-sider-menu.ant-menu-light {
+  border-inline-end: none !important;
+  background: #ffffff;
+}
+
+.kanban-sider-menu.ant-menu-light .ant-menu-item {
+  color: #262626;
+  border: 1px solid transparent;
+}
+
+.kanban-sider-menu.ant-menu-light .ant-menu-item:hover {
+  color: #0a0a0a;
+}
+
+.kanban-sider-menu.ant-menu-light .ant-menu-item-selected {
+  font-weight: 600;
+  color: #0a0a0a;
+  border-color: #e0e0e0;
+}
+
+.kanban-sider-menu.ant-menu-light .ant-menu-item .kanban-board-icon-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  line-height: 1;
+}
+
+.kanban-sider-menu.ant-menu-light .ant-menu-item .kanban-board-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background-color: #ffffff;
+  color: #0a0a0a;
+  border: 1px solid #d4d4d4;
+  flex-shrink: 0;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.kanban-sider-menu.ant-menu-light
+  .ant-menu-item:hover
+  .kanban-board-badge:not(.kanban-board-badge--active) {
+  background-color: #ffffff;
+  color: #0a0a0a;
+  border-color: #0a0a0a;
+}
+
+.kanban-sider-menu.ant-menu-light
+  .ant-menu-item-selected
+  .kanban-board-badge,
+.kanban-sider-menu.ant-menu-light
+  .ant-menu-item
+  .kanban-board-badge--active {
+  background-color: #0a0a0a;
+  color: #ffffff;
+  border-color: #0a0a0a;
+}
+
+.kanban-board-action-trigger {
+  color: inherit;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+.kanban-board-action-trigger:hover {
+  background-color: rgba(10, 10, 10, 0.08);
+}
+
+/* Columns */
+.kanban-column {
+  width: 310px;
+  flex-shrink: 0;
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.kanban-column--dragging {
+  border-color: #0a0a0a;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+}
+
+.kanban-column-tasks {
+  min-height: 52px;
+  padding: 4px 12px 8px;
+  border-radius: 8px;
+  transition:
+    background-color 0.15s ease,
+    outline 0.15s ease;
+}
+
+.kanban-column-tasks--dragging-over {
+  background-color: #eaeaea;
+  outline: 1.5px dashed #0a0a0a;
+  outline-offset: -4px;
+}
+
+/* Task cards */
+.kanban-task-card {
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.kanban-task-card:hover {
+  border-color: #0a0a0a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.kanban-task-card--dragging {
+  border: 1.5px solid #0a0a0a;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.16);
+}
+
+/* Monochrome Priority Badges */
+.kanban-priority-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.kanban-priority-badge--HIGH {
+  background-color: #0a0a0a;
+  color: #ffffff;
+  border: 1px solid #0a0a0a;
+}
+
+.kanban-priority-badge--MEDIUM {
+  background-color: #e5e5e5;
+  color: #0a0a0a;
+  border: 1px solid #a3a3a3;
+}
+
+.kanban-priority-badge--LOW {
+  background-color: #ffffff;
+  color: #525252;
+  border: 1px solid #d4d4d4;
+}

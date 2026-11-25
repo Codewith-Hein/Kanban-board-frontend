@@ -1,24 +1,22 @@
-import { ExclamationCircleFilled, MoreOutlined } from "@ant-design/icons";
 import {
-  Button,
-  Card,
-  Dropdown,
-  Input,
-  message,
-  Modal,
-  Select,
-  Tag,
-} from "antd";
+  ExclamationCircleFilled,
+  HolderOutlined,
+  MoreOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
+import { Draggable, Droppable } from "@hello-pangea/dnd";
+import { Button, Dropdown, Input, message, Modal, Select } from "antd";
 import React, { useState } from "react";
+import { getErrorMessage } from "../api/axiosClient";
 import { createTask, deleteTask, updateTask } from "../api/taskApi";
 import type { BoardColumnType, Priority, Task } from "../types/Kanban";
-import { Droppable, Draggable } from "@hello-pangea/dnd";
 
 const { TextArea } = Input;
 
 interface BoardColumnProps {
   columnList: BoardColumnType[];
-  editModel: (column: BoardColumnType) => void;
+  isDragDisabled?: boolean;
+  editModal: (column: BoardColumnType) => void;
   handleDelete: (id: number) => void;
   onTaskCreated: (newTask: Task) => void;
   handleTaskDelete: (id: number) => void;
@@ -27,14 +25,15 @@ interface BoardColumnProps {
 
 const BoardColumn: React.FC<BoardColumnProps> = ({
   columnList,
-  editModel,
+  isDragDisabled = false,
+  editModal,
   handleDelete,
   onTaskCreated,
   handleTaskDelete,
   handleTaskUpdate,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
-  const [isModalOpen, setIsModelOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedColumnId, setSelectedColumnId] = useState<number | null>(null);
 
   const [priority, setPriority] = useState<Priority>("LOW");
@@ -48,49 +47,41 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
       message.success("Task deleted successfully");
       handleTaskDelete(id);
     } catch (error) {
-      message.error("Fail to delete a task");
-      console.log(error);
+      message.error(getErrorMessage(error, "Failed to delete task"));
     }
   };
 
   const handleTaskEdit = async (taskToEdit: Task) => {
-    // 1. Send the update to the backend
-    await updateTask(taskToEdit.taskId, {
+    const updated = await updateTask(taskToEdit.taskId, {
       title: taskTitle.trim(),
       description: taskDesc.trim(),
       position: taskToEdit.position,
-      priority: priority,
+      priority,
     });
 
-    // 2. Manually construct the updated task for React using the form state!
-    const updatedTaskForUI: Task = {
-      ...taskToEdit, // Keeps the original taskId, columnId, etc.
-      title: taskTitle.trim(),
-      description: taskDesc.trim(),
-      priority: priority,
-    };
-
-    // 3. Send our perfectly shaped object to BoardView to update the screen
-    handleTaskUpdate(updatedTaskForUI);
+    handleTaskUpdate(updated);
     message.success("Task updated successfully");
   };
 
   const handleTaskCreate = async () => {
-    const currentCol = columnList.find((c) => c.columnId === selectedColumnId);
-    const nextPosition = (currentCol?.tasks?.length || 0) + 1;
-
-    // 1. Call the API and capture the newly created task
     const newTask = await createTask({
       title: taskTitle.trim(),
       description: taskDesc.trim(),
-      position: nextPosition,
-      columnId: selectedColumnId as number, // Guaranteed to be a number by this point
-      priority: priority,
+      columnId: selectedColumnId as number,
+      priority,
     });
 
-    // 2. Pass it to the UI
     onTaskCreated(newTask);
     message.success("Task created successfully");
+  };
+
+  const resetModal = () => {
+    setIsModalOpen(false);
+    setTaskTitle("");
+    setTaskDesc("");
+    setPriority("LOW");
+    setEditTask(null);
+    setSelectedColumnId(null);
   };
 
   const handleOk = async () => {
@@ -100,40 +91,27 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
     }
 
     setLoading(true);
-
     try {
       if (editTask) {
         await handleTaskEdit(editTask);
       } else {
         await handleTaskCreate();
       }
-
-      // Cleanup runs only if the await functions above succeed
-      setIsModelOpen(false);
-      setTaskTitle("");
-      setTaskDesc("");
-      setPriority("LOW");
-      setEditTask(null);
-      setSelectedColumnId(null);
+      resetModal();
     } catch (error) {
-      message.error(editTask ? "Fail to update task" : "Fail to create task");
-      console.log(error);
+      message.error(
+        getErrorMessage(
+          error,
+          editTask ? "Failed to update task" : "Failed to create task",
+        ),
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    setIsModelOpen(false);
-    setTaskTitle("");
-    setTaskDesc("");
-    setPriority("LOW");
-    setEditTask(null);
-    setSelectedColumnId(null);
-  };
-
   const openEditModal = (oldTask: Task, columnId: number) => {
-    setIsModelOpen(true);
+    setIsModalOpen(true);
     setEditTask(oldTask);
     setTaskTitle(oldTask.title ?? "");
     setTaskDesc(oldTask.description ?? "");
@@ -143,229 +121,336 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
 
   const onOpenCreateTask = (columnId: number) => {
     setSelectedColumnId(columnId);
-    setIsModelOpen(true);
+    setIsModalOpen(true);
     setEditTask(null);
     setTaskTitle("");
     setTaskDesc("");
     setPriority("LOW");
   };
 
-  const getPriorityColor = (prio: Priority) => {
-    if (prio === "HIGH") return "volcano"; // A softer, more modern red in Ant Design
-    if (prio === "MEDIUM") return "gold";
-    return "cyan";
-  };
-
   return (
     <>
-      <div
-        style={{
-          display: "flex",
-          gap: 16,
-          overflowX: "auto",
-          paddingBottom: 16,
-          marginTop: 16,
-          alignItems: "flex-start",
-        }}
-      >
-        {columnList.map((column) => (
-          <Card
-            key={column.columnId}
-            title={column.title}
-            extra={
-              <Dropdown
-                trigger={["click"]}
-                menu={{
-                  items: [
-                    { key: "edit", label: "Edit" },
-                    { key: "delete", label: "Delete", danger: true },
-                  ],
-                  onClick: (info) => {
-                    if (info.key === "edit") {
-                      editModel(column);
-                    } else if (info.key === "delete") {
-                      Modal.confirm({
-                        title: "Delete Column",
-                        icon: <ExclamationCircleFilled />,
-                        content: `Are you sure you want to delete "${column.title}"?`,
-                        okText: "Yes, Delete",
-                        okType: "danger",
-                        cancelText: "Cancel",
-                        onOk: () => {
-                          handleDelete(column.columnId);
-                        },
-                      });
-                    }
-                  },
-                }}
-              >
-                <MoreOutlined style={{ cursor: "pointer" }} />
-              </Dropdown>
-            }
-            variant="borderless"
+      <Droppable droppableId="board" direction="horizontal" type="COLUMN">
+        {(boardProvided) => (
+          <div
+            ref={boardProvided.innerRef}
+            {...boardProvided.droppableProps}
             style={{
-              width: 300,
-              flexShrink: 0,
-              background: "#f4f5f7",
+              display: "flex",
+              gap: 16,
+              overflowX: "auto",
+              paddingBottom: 16,
+              marginTop: 18,
+              alignItems: "flex-start",
+              flex: 1,
             }}
           >
-            {/* Render the Tasks inside this Column */}
-            {/* --- DROPPABLE AREA START --- */}
-            <Droppable droppableId={String(column.columnId)}>
-              {(provided) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  style={{ minHeight: "10px" }} // Ensures you can drop into an empty column!
+            {columnList.map((column, colIndex) => {
+              const tasks = column.tasks || [];
+              return (
+                <Draggable
+                  key={column.columnId}
+                  draggableId={`col-${column.columnId}`}
+                  index={colIndex}
+                  isDragDisabled={isDragDisabled}
                 >
-                  {(column.tasks || []).map((task, index) => (
-                    /* --- DRAGGABLE TASK START --- */
-                    <Draggable
-                      key={String(task.taskId)}
-                      draggableId={String(task.taskId)}
-                      index={index}
+                  {(colProvided, colSnapshot) => (
+                    <div
+                      ref={colProvided.innerRef}
+                      {...colProvided.draggableProps}
+                      className={`kanban-column${
+                        colSnapshot.isDragging ? " kanban-column--dragging" : ""
+                      }`}
                     >
-                      {(provided, snapshot) => (
+                      {/* Column Header (Drag Handle) */}
+                      <div
+                        {...colProvided.dragHandleProps}
+                        style={{
+                          padding: "14px 14px 10px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          cursor: isDragDisabled ? "default" : "grab",
+                        }}
+                      >
                         <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
                           style={{
-                            ...provided.draggableProps.style,
-                            opacity: snapshot.isDragging ? 0.8 : 1, // Cool visual effect when dragging
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            minWidth: 0,
+                            flex: 1,
                           }}
                         >
-                          {/* YOUR EXISTING TASK CARD */}
-                          <Card
-                            size="small"
-                            variant="borderless"
+                          {!isDragDisabled && (
+                            <HolderOutlined
+                              style={{ color: "#737373", fontSize: 13 }}
+                            />
+                          )}
+                          <span
                             style={{
-                              marginBottom: 10,
-                              background: "#fff",
-                              boxShadow: snapshot.isDragging
-                                ? "0 5px 15px rgba(0,0,0,0.15)"
-                                : "none", // Adds a shadow when picked up
+                              fontWeight: 600,
+                              fontSize: 15,
+                              color: "#0a0a0a",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
                             }}
-                            extra={
-                              <Dropdown
-                                trigger={["hover"]}
-                                menu={{
-                                  items: [
-                                    { key: "edit", label: "Edit" },
-                                    {
-                                      key: "delete",
-                                      label: "Delete",
-                                      danger: true,
-                                    },
-                                  ],
-                                  onClick: (info) => {
-                                    if (info.key === "edit") {
-                                      openEditModal(task, column.columnId);
-                                    } else if (info.key === "delete") {
-                                      Modal.confirm({
-                                        title: "Delete task",
-                                        icon: <ExclamationCircleFilled />,
-                                        content: `Are you sure you want to delete "${task.title}"?`,
-                                        okText: "Yes, Delete",
-                                        okType: "danger",
-                                        cancelText: "Cancel",
-                                        onOk: () => {
-                                          handleDeleteTask(task.taskId);
-                                        },
-                                      });
-                                    }
-                                  },
-                                }}
-                              >
-                                <MoreOutlined style={{ cursor: "pointer" }} />
-                              </Dropdown>
-                            }
                           >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "flex-start",
-                              }}
-                            >
-                              <strong>{task.title}</strong>
-                            </div>
-                            {task.description && (
-                              <p
-                                style={{
-                                  color: "#666",
-                                  fontSize: "13px",
-                                  marginTop: 4,
-                                  marginBottom: 8,
-                                }}
-                              >
-                                {task.description}
-                              </p>
-                            )}
-                            <Tag
-                              color={getPriorityColor(task.priority)}
-                              style={{ marginTop: 4 }}
-                            >
-                              {task.priority}
-                            </Tag>
-                          </Card>
+                            {column.title}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              padding: "2px 7px",
+                              borderRadius: 999,
+                              background: "#0a0a0a",
+                              color: "#ffffff",
+                              lineHeight: 1.4,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {tasks.length}
+                          </span>
                         </div>
-                      )}
-                    </Draggable>
-                    /* --- DRAGGABLE TASK END --- */
-                  ))}
 
-                  {/* Required by the library to make room when dropping */}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-            {/* --- DROPPABLE AREA END --- */}
+                        <Dropdown
+                          trigger={["click"]}
+                          menu={{
+                            items: [
+                              { key: "edit", label: "Edit" },
+                              { key: "delete", label: "Delete", danger: true },
+                            ],
+                            onClick: (info) => {
+                              info.domEvent.stopPropagation();
+                              if (info.key === "edit") {
+                                editModal(column);
+                              } else if (info.key === "delete") {
+                                Modal.confirm({
+                                  title: "Delete Column",
+                                  icon: (
+                                    <ExclamationCircleFilled
+                                      style={{ color: "#0a0a0a" }}
+                                    />
+                                  ),
+                                  content: `Are you sure you want to delete "${column.title}"?`,
+                                  okText: "Yes, Delete",
+                                  okType: "danger",
+                                  cancelText: "Cancel",
+                                  onOk: () => handleDelete(column.columnId),
+                                });
+                              }
+                            },
+                          }}
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            aria-label={`Actions for ${column.title}`}
+                            icon={<MoreOutlined />}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: "#0a0a0a" }}
+                          />
+                        </Dropdown>
+                      </div>
 
-            <Button
-              block
-              type="dashed"
-              onClick={() => onOpenCreateTask(column.columnId)}
-              style={{ marginTop: 8 }}
-            >
-              + Add Task
-            </Button>
-          </Card>
-        ))}
-      </div>
+                      {/* Droppable Task List */}
+                      <Droppable
+                        droppableId={`col-tasks-${column.columnId}`}
+                        type="TASK"
+                      >
+                        {(tasksProvided, tasksSnapshot) => (
+                          <div
+                            ref={tasksProvided.innerRef}
+                            {...tasksProvided.droppableProps}
+                            className={`kanban-column-tasks${
+                              tasksSnapshot.isDraggingOver
+                                ? " kanban-column-tasks--dragging-over"
+                                : ""
+                            }`}
+                          >
+                            {tasks.map((task, taskIndex) => (
+                              <Draggable
+                                key={task.taskId}
+                                draggableId={`task-${task.taskId}`}
+                                index={taskIndex}
+                                isDragDisabled={isDragDisabled}
+                              >
+                                {(taskProvided, taskSnapshot) => (
+                                  <div
+                                    ref={taskProvided.innerRef}
+                                    {...taskProvided.draggableProps}
+                                    {...taskProvided.dragHandleProps}
+                                    className={`kanban-task-card${
+                                      taskSnapshot.isDragging
+                                        ? " kanban-task-card--dragging"
+                                        : ""
+                                    }`}
+                                    style={{
+                                      ...taskProvided.draggableProps.style,
+                                      cursor: isDragDisabled
+                                        ? "default"
+                                        : "grab",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "flex-start",
+                                        gap: 8,
+                                      }}
+                                    >
+                                      <strong
+                                        style={{
+                                          color: "#0a0a0a",
+                                          fontSize: 14,
+                                          lineHeight: 1.4,
+                                          overflowWrap: "anywhere",
+                                        }}
+                                      >
+                                        {task.title}
+                                      </strong>
+                                      <Dropdown
+                                        trigger={["click"]}
+                                        menu={{
+                                          items: [
+                                            { key: "edit", label: "Edit" },
+                                            {
+                                              key: "delete",
+                                              label: "Delete",
+                                              danger: true,
+                                            },
+                                          ],
+                                          onClick: (info) => {
+                                            info.domEvent.stopPropagation();
+                                            if (info.key === "edit") {
+                                              openEditModal(
+                                                task,
+                                                column.columnId,
+                                              );
+                                            } else if (info.key === "delete") {
+                                              Modal.confirm({
+                                                title: "Delete Task",
+                                                icon: (
+                                                  <ExclamationCircleFilled
+                                                    style={{ color: "#0a0a0a" }}
+                                                  />
+                                                ),
+                                                content: `Are you sure you want to delete "${task.title}"?`,
+                                                okText: "Yes, Delete",
+                                                okType: "danger",
+                                                cancelText: "Cancel",
+                                                onOk: () =>
+                                                  handleDeleteTask(task.taskId),
+                                              });
+                                            }
+                                          },
+                                        }}
+                                      >
+                                        <Button
+                                          type="text"
+                                          size="small"
+                                          aria-label={`Actions for ${task.title ?? "task"}`}
+                                          icon={<MoreOutlined />}
+                                          onClick={(e) => e.stopPropagation()}
+                                          style={{
+                                            color: "#525252",
+                                            flexShrink: 0,
+                                          }}
+                                        />
+                                      </Dropdown>
+                                    </div>
+
+                                    {task.description && (
+                                      <p
+                                        style={{
+                                          color: "#525252",
+                                          fontSize: 13,
+                                          lineHeight: 1.5,
+                                          marginTop: 6,
+                                          marginBottom: 10,
+                                          overflowWrap: "anywhere",
+                                        }}
+                                      >
+                                        {task.description}
+                                      </p>
+                                    )}
+
+                                    <div style={{ marginTop: 8 }}>
+                                      <span
+                                        className={`kanban-priority-badge kanban-priority-badge--${task.priority}`}
+                                      >
+                                        {task.priority}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {tasksProvided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+
+                      <div style={{ padding: "4px 12px 12px" }}>
+                        <Button
+                          block
+                          type="dashed"
+                          icon={<PlusOutlined />}
+                          onClick={() => onOpenCreateTask(column.columnId)}
+                        >
+                          Add Task
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </Draggable>
+              );
+            })}
+            {boardProvided.placeholder}
+          </div>
+        )}
+      </Droppable>
 
       <Modal
         title={editTask ? "Edit Task" : "Create Task"}
-        closable={{ "aria-label": "Custom Close Button" }}
+        closable={{ "aria-label": "Close" }}
         open={isModalOpen}
         onOk={handleOk}
-        onCancel={handleCancel}
+        onCancel={resetModal}
         confirmLoading={loading}
+        okText={editTask ? "Save Changes" : "Create Task"}
       >
-        <Input
-          placeholder="Enter Task Title"
-          style={{ marginBottom: 10 }}
-          value={taskTitle}
-          onChange={(e) => setTaskTitle(e.target.value)}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Input
+            autoFocus
+            placeholder="Enter task title"
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            onPressEnter={handleOk}
+          />
 
-        <TextArea
-          rows={4}
-          placeholder="Task Description"
-          value={taskDesc}
-          onChange={(e) => setTaskDesc(e.target.value)}
-        />
+          <TextArea
+            rows={4}
+            placeholder="Task description (optional)"
+            value={taskDesc}
+            onChange={(e) => setTaskDesc(e.target.value)}
+          />
 
-        <Select
-          value={priority}
-          onChange={(value) => setPriority(value)}
-          style={{ width: "100%", marginTop: 10 }}
-          options={[
-            { value: "LOW", label: "Low Priority" },
-            { value: "MEDIUM", label: "Medium Priority" },
-            { value: "HIGH", label: "High Priority" },
-          ]}
-        />
+          <Select<Priority>
+            value={priority}
+            onChange={(value) => setPriority(value)}
+            style={{ width: "100%" }}
+            options={[
+              { value: "LOW", label: "Low Priority" },
+              { value: "MEDIUM", label: "Medium Priority" },
+              { value: "HIGH", label: "High Priority" },
+            ]}
+          />
+        </div>
       </Modal>
     </>
   );

@@ -17,16 +17,19 @@ export const getAllTask = async (): Promise<Task[]> => {
   return response.data.data;
 };
 
-export const moveTask = async (id: number, data: MoveTaskRequest): Promise<Task> => {
+export const moveTask = async (
+  id: number,
+  data: MoveTaskRequest,
+): Promise<Task> => {
   const response = await axiosClient.put<BaseResponse<Task>>(
-    `/tasks/${id}/move`, data
+    `/tasks/${id}/move`,
+    data,
   );
   return response.data.data;
 };
 
-export const deleteTask = async (id: number): Promise<string> => {
-  const response = await axiosClient.delete<string>(`/tasks/${id}`);
-  return response.data;
+export const deleteTask = async (id: number): Promise<void> => {
+  await axiosClient.delete<BaseResponse<void>>(`/tasks/${id}`);
 };
 
 export const updateTask = async (

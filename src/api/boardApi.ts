@@ -27,6 +27,6 @@ export const updateBoard = async (
 };
 
 export const deleteBoard = async (id: number): Promise<void> => {
-  const respone = await axiosClient.delete(`/board/${id}`);
-  return respone.data;
+  const response = await axiosClient.delete(`/board/${id}`);
+  return response.data;
 };

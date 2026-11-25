@@ -16,7 +16,7 @@ export const createBoardColumn = async (
 export const getColumnByBoardId = async (
   id: number,
 ): Promise<BoardColumnType[]> => {
-  const response = await axiosClient.get(`/board-columns/${id}`);
+  const response = await axiosClient.get(`/board-columns/board/${id}`);
   return response.data;
 };
 

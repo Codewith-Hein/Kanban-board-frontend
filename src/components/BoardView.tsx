@@ -1,67 +1,123 @@
-import { Button, Input, Layout, message, Modal, Spin, theme } from "antd";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
+import {
+  Button,
+  Empty,
+  Input,
+  Layout,
+  message,
+  Modal,
+  Select,
+  Spin,
+  Tag,
+} from "antd";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { getErrorMessage } from "../api/axiosClient";
 import {
   createBoardColumn,
   deleteBoardColumn,
   updateBoardColumn,
 } from "../api/columnApi";
-import type { BoardColumnType, BoardDetail, Task } from "../types/Kanban";
+import { moveTask } from "../api/taskApi";
+import type {
+  BoardColumnType,
+  BoardDetail,
+  Priority,
+  Task,
+} from "../types/Kanban";
 import BoardColumn from "./BoardColumn";
-import { DragDropContext } from "@hello-pangea/dnd";
-import type { DropResult } from "@hello-pangea/dnd";
-import { moveTask } from "../api/taskApi"; // Don't forget to import your new API!
 
 const { Content } = Layout;
 
 interface BoardViewProps {
   currentBoard: BoardDetail | null;
   boardLoading: boolean;
+  onBoardColumnsChange: (
+    updater: (prevCols: BoardColumnType[]) => BoardColumnType[],
+  ) => void;
+  onOpenCreateBoardModal: () => void;
+}
+
+function parsePrefixedId(raw: string, prefix: string): number {
+  return Number(raw.startsWith(prefix) ? raw.slice(prefix.length) : raw);
+}
+
+function normalizeTaskPositions(tasks: Task[], columnId: number): Task[] {
+  return tasks.map((task, idx) => ({
+    ...task,
+    columnId,
+    position: idx + 1,
+  }));
 }
 
 const BoardView: React.FC<BoardViewProps> = ({
   currentBoard,
   boardLoading,
+  onBoardColumnsChange,
+  onOpenCreateBoardModal,
 }) => {
-  const {
-    token: { colorBgContainer, borderRadiusLG },
-  } = theme.useToken();
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [columnNameInput, setColumnNameInput] = useState<string>("");
-  const [columnList, setColumnList] = useState<BoardColumnType[]>([]);
   const [editColumn, setEditColumn] = useState<BoardColumnType | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [priorityFilter, setPriorityFilter] = useState<"ALL" | Priority>("ALL");
 
-  const openModel = () => {
+  const columnList = useMemo(
+    () => currentBoard?.boardColumnResponseList ?? [],
+    [currentBoard],
+  );
+
+  const isFiltered =
+    searchQuery.trim().length > 0 || priorityFilter !== "ALL";
+
+  const displayedColumns = useMemo(() => {
+    if (!isFiltered) return columnList;
+    const q = searchQuery.trim().toLowerCase();
+    return columnList.map((col) => ({
+      ...col,
+      tasks: (col.tasks || []).filter((task) => {
+        const matchesPriority =
+          priorityFilter === "ALL" || task.priority === priorityFilter;
+        const matchesQuery =
+          !q ||
+          (task.title ?? "").toLowerCase().includes(q) ||
+          (task.description ?? "").toLowerCase().includes(q);
+        return matchesPriority && matchesQuery;
+      }),
+    }));
+  }, [columnList, isFiltered, priorityFilter, searchQuery]);
+
+  const totalTasks = useMemo(
+    () =>
+      columnList.reduce((sum, col) => sum + (col.tasks ? col.tasks.length : 0), 0),
+    [columnList],
+  );
+
+  const openCreateColumnModal = () => {
     setEditColumn(null);
-    setIsModalOpen(true);
     setColumnNameInput("");
-  };
-
-  const showEditModel = (editColumn: BoardColumnType) => {
     setIsModalOpen(true);
-    setEditColumn(editColumn);
-    setColumnNameInput(editColumn?.title);
-  };
-  const handleTaskDeleted = (taskId: number) => {
-    setColumnList((prev) =>
-      prev.map((col) => ({
-        ...col,
-        // Keep all tasks EXCEPT the one we just deleted
-        tasks: (col.tasks || []).filter((task) => task.taskId !== taskId),
-      })),
-    );
   };
 
-  const handleDelete = async (id: number) => {
+  const showEditModal = (column: BoardColumnType) => {
+    setEditColumn(column);
+    setColumnNameInput(column.title);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteColumn = async (id: number) => {
     try {
       await deleteBoardColumn(id);
-      setColumnList((prev) => prev.filter((p) => p.columnId !== id));
-      message.success("delete column successful");
+      onBoardColumnsChange((prev) =>
+        prev
+          .filter((col) => col.columnId !== id)
+          .map((col, idx) => ({ ...col, position: idx + 1 })),
+      );
+      message.success("Column deleted successfully");
     } catch (error) {
-      message.error("fail to delete column");
-      console.log(error);
+      message.error(getErrorMessage(error, "Failed to delete column"));
     }
   };
 
@@ -72,7 +128,7 @@ const BoardView: React.FC<BoardViewProps> = ({
   };
 
   const handleTaskCreated = (newTask: Task) => {
-    setColumnList((prev) =>
+    onBoardColumnsChange((prev) =>
       prev.map((col) =>
         col.columnId === newTask.columnId
           ? { ...col, tasks: [...(col.tasks || []), newTask] }
@@ -81,20 +137,33 @@ const BoardView: React.FC<BoardViewProps> = ({
     );
   };
 
-  const handleTaskUpdate = (updateTask: Task) => {
-    setColumnList((prev) =>
+  const handleTaskDeleted = (taskId: number) => {
+    onBoardColumnsChange((prev) =>
+      prev.map((col) => {
+        const filtered = (col.tasks || []).filter((t) => t.taskId !== taskId);
+        return {
+          ...col,
+          tasks: normalizeTaskPositions(filtered, col.columnId),
+        };
+      }),
+    );
+  };
+
+  const handleTaskUpdated = (updatedTask: Task) => {
+    onBoardColumnsChange((prev) =>
       prev.map((col) => ({
         ...col,
         tasks: (col.tasks || []).map((t) =>
-          t.taskId === updateTask.taskId ? updateTask : t,
+          t.taskId === updatedTask.taskId ? updatedTask : t,
         ),
       })),
     );
   };
 
   const handleOk = async () => {
-    if (!columnNameInput.trim() || !currentBoard) {
-      message.warning("column name is required");
+    const trimmedTitle = columnNameInput.trim();
+    if (!trimmedTitle || !currentBoard) {
+      message.warning("Column name is required");
       return;
     }
 
@@ -103,26 +172,26 @@ const BoardView: React.FC<BoardViewProps> = ({
 
       if (editColumn) {
         const updated = await updateBoardColumn(editColumn.columnId, {
-          title: columnNameInput.trim(),
+          title: trimmedTitle,
           position: editColumn.position,
         });
 
-        setColumnList((prev) =>
+        onBoardColumnsChange((prev) =>
           prev.map((col) =>
             col.columnId === editColumn.columnId
-              ? { ...col, title: updated.title, position: updated.position } // Keeps columnId & tasks, updates title!
+              ? { ...col, title: updated.title, position: updated.position }
               : col,
           ),
         );
         message.success("Column updated successfully");
       } else {
         const newColumn = await createBoardColumn({
-          boardId: currentBoard?.id,
-          title: columnNameInput.trim(),
+          boardId: currentBoard.id,
+          title: trimmedTitle,
           position: columnList.length + 1,
         });
 
-        setColumnList((prev) => [...prev, newColumn]);
+        onBoardColumnsChange((prev) => [...prev, newColumn]);
         message.success("Column created successfully");
       }
 
@@ -131,29 +200,20 @@ const BoardView: React.FC<BoardViewProps> = ({
       setEditColumn(null);
     } catch (error) {
       message.error(
-        editColumn ? "fail to update column" : "fail to create column",
+        getErrorMessage(
+          error,
+          editColumn ? "Failed to update column" : "Failed to create column",
+        ),
       );
-      console.log(error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (currentBoard && currentBoard.boardColumnResponseList) {
-      setColumnList(currentBoard.boardColumnResponseList);
-    } else {
-      setColumnList([]);
-    }
-  }, [currentBoard]);
-
   const handleDragEnd = async (result: DropResult) => {
-    const { source, destination, draggableId } = result;
+    const { source, destination, draggableId, type } = result;
 
-    // 1. If dropped outside a valid column, do nothing
     if (!destination) return;
-
-    // 2. If dropped in the exact same spot, do nothing
     if (
       source.droppableId === destination.droppableId &&
       source.index === destination.index
@@ -161,48 +221,88 @@ const BoardView: React.FC<BoardViewProps> = ({
       return;
     }
 
-    const sourceColId = Number(source.droppableId);
-    const destColId = Number(destination.droppableId);
-    const taskId = Number(draggableId);
+    const previousColumns = columnList;
 
-    // 3. Clone the arrays so we can mutate them safely
-    const newColumnList = [...columnList];
-    const sourceColIndex = newColumnList.findIndex(
-      (col) => col.columnId === sourceColId,
-    );
-    const destColIndex = newColumnList.findIndex(
-      (col) => col.columnId === destColId,
-    );
+    if (type === "COLUMN") {
+      const columnId = parsePrefixedId(draggableId, "col-");
+      const nextColumns = [...columnList];
+      const [movedColumn] = nextColumns.splice(source.index, 1);
+      if (!movedColumn) return;
 
-    const sourceTasks = [...(newColumnList[sourceColIndex].tasks || [])];
-    const destTasks =
-      sourceColId === destColId
-        ? sourceTasks
-        : [...(newColumnList[destColIndex].tasks || [])];
+      nextColumns.splice(destination.index, 0, movedColumn);
+      const normalizedColumns = nextColumns.map((col, idx) => ({
+        ...col,
+        position: idx + 1,
+      }));
 
-    // 4. Remove the task from its old position
-    const [movedTask] = sourceTasks.splice(source.index, 1);
+      onBoardColumnsChange(() => normalizedColumns);
 
-    // 5. Insert the task into its new position
-    destTasks.splice(destination.index, 0, movedTask);
-
-    // 6. Update the React state instantly (Optimistic UI Update)
-    newColumnList[sourceColIndex].tasks = sourceTasks;
-    if (sourceColId !== destColId) {
-      newColumnList[destColIndex].tasks = destTasks;
+      try {
+        await updateBoardColumn(columnId, {
+          title: movedColumn.title,
+          position: destination.index + 1,
+        });
+      } catch (error) {
+        onBoardColumnsChange(() => previousColumns);
+        message.error(getErrorMessage(error, "Failed to reorder column"));
+      }
+      return;
     }
-    setColumnList(newColumnList);
 
-    // 7. Tell Spring Boot about the move in the background
+    const sourceColId = parsePrefixedId(source.droppableId, "col-tasks-");
+    const destColId = parsePrefixedId(destination.droppableId, "col-tasks-");
+    const taskId = parsePrefixedId(draggableId, "task-");
+
+    const sourceCol = columnList.find((col) => col.columnId === sourceColId);
+    const destCol = columnList.find((col) => col.columnId === destColId);
+    if (!sourceCol || !destCol) return;
+
+    const sourceTasks = [...(sourceCol.tasks || [])];
+    const [movedTask] = sourceTasks.splice(source.index, 1);
+    if (!movedTask) return;
+
+    let nextColumns: BoardColumnType[];
+
+    if (sourceColId === destColId) {
+      sourceTasks.splice(destination.index, 0, movedTask);
+      const updatedTasks = normalizeTaskPositions(sourceTasks, sourceColId);
+      nextColumns = columnList.map((col) =>
+        col.columnId === sourceColId ? { ...col, tasks: updatedTasks } : col,
+      );
+    } else {
+      const destTasks = [...(destCol.tasks || [])];
+      destTasks.splice(destination.index, 0, {
+        ...movedTask,
+        columnId: destColId,
+      });
+
+      const updatedSourceTasks = normalizeTaskPositions(
+        sourceTasks,
+        sourceColId,
+      );
+      const updatedDestTasks = normalizeTaskPositions(destTasks, destColId);
+
+      nextColumns = columnList.map((col) => {
+        if (col.columnId === sourceColId) {
+          return { ...col, tasks: updatedSourceTasks };
+        }
+        if (col.columnId === destColId) {
+          return { ...col, tasks: updatedDestTasks };
+        }
+        return col;
+      });
+    }
+
+    onBoardColumnsChange(() => nextColumns);
+
     try {
       await moveTask(taskId, {
         columnId: destColId,
         position: destination.index + 1,
       });
     } catch (error) {
-      message.error("Failed to move task on the server.");
-      console.log(error);
-      // If you want to be extra safe, you could reload the board here if it fails!
+      onBoardColumnsChange(() => previousColumns);
+      message.error(getErrorMessage(error, "Failed to move task"));
     }
   };
 
@@ -210,61 +310,208 @@ const BoardView: React.FC<BoardViewProps> = ({
     <>
       <Content
         style={{
-          margin: "24px 16px",
+          margin: 20,
           padding: 24,
           minHeight: 280,
-          background: colorBgContainer,
-          borderRadius: borderRadiusLG,
+          background: "#ffffff",
+          border: "1px solid #e5e5e5",
+          borderRadius: 12,
           overflowX: "auto",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {boardLoading ? (
-          <Spin />
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: 320,
+            }}
+          >
+            <Spin size="large" />
+          </div>
         ) : currentBoard ? (
-          <div>
+          <>
             <div
               style={{
                 display: "flex",
+                flexWrap: "wrap",
+                gap: 16,
                 justifyContent: "space-between",
                 alignItems: "center",
+                paddingBottom: 16,
+                borderBottom: "1px solid #efefef",
               }}
             >
               <div>
-                <h2>{currentBoard.name}</h2>
-                <p>Board ID :{currentBoard.id}</p>
+                <h2
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 700,
+                    letterSpacing: "-0.02em",
+                    color: "#0a0a0a",
+                    margin: 0,
+                  }}
+                >
+                  {currentBoard.name}
+                </h2>
+                <p
+                  style={{
+                    color: "#737373",
+                    fontSize: 13,
+                    marginTop: 4,
+                    marginBottom: 0,
+                  }}
+                >
+                  {columnList.length}{" "}
+                  {columnList.length === 1 ? "column" : "columns"} ·{" "}
+                  {totalTasks} {totalTasks === 1 ? "task" : "tasks"}
+                </p>
               </div>
 
-              <Button type="primary" onClick={openModel}>
-                + Create Column
-              </Button>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                {columnList.length > 0 && (
+                  <>
+                    <Input
+                      allowClear
+                      prefix={<SearchOutlined style={{ color: "#737373" }} />}
+                      placeholder="Filter tasks..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{ width: 200 }}
+                    />
+                    <Select<"ALL" | Priority>
+                      value={priorityFilter}
+                      onChange={(val) => setPriorityFilter(val)}
+                      style={{ width: 145 }}
+                      options={[
+                        { value: "ALL", label: "All Priorities" },
+                        { value: "HIGH", label: "High Priority" },
+                        { value: "MEDIUM", label: "Medium Priority" },
+                        { value: "LOW", label: "Low Priority" },
+                      ]}
+                    />
+                  </>
+                )}
+
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={openCreateColumnModal}
+                >
+                  Create Column
+                </Button>
+              </div>
             </div>
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <BoardColumn
-                columnList={columnList}
-                editModel={showEditModel}
-                handleDelete={handleDelete}
-                onTaskCreated={handleTaskCreated}
-                handleTaskDelete={handleTaskDeleted}
-                handleTaskUpdate={handleTaskUpdate}
-              />
-            </DragDropContext>
-          </div>
+
+            {isFiltered && (
+              <div style={{ marginTop: 12 }}>
+                <Tag
+                  style={{
+                    background: "#f5f5f5",
+                    color: "#0a0a0a",
+                    borderColor: "#d4d4d4",
+                  }}
+                >
+                  Drag-and-drop reordering is paused while filters are active
+                </Tag>
+              </div>
+            )}
+
+            {columnList.length === 0 ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 320,
+                }}
+              >
+                <Empty
+                  description={
+                    <span style={{ color: "#525252" }}>
+                      No columns yet. Add a column to start organizing tasks.
+                    </span>
+                  }
+                >
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={openCreateColumnModal}
+                  >
+                    Create First Column
+                  </Button>
+                </Empty>
+              </div>
+            ) : (
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <BoardColumn
+                  columnList={displayedColumns}
+                  isDragDisabled={isFiltered}
+                  editModal={showEditModal}
+                  handleDelete={handleDeleteColumn}
+                  onTaskCreated={handleTaskCreated}
+                  handleTaskDelete={handleTaskDeleted}
+                  handleTaskUpdate={handleTaskUpdated}
+                />
+              </DragDropContext>
+            )}
+          </>
         ) : (
-          <p>Please Select a board from Menu</p>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: 320,
+            }}
+          >
+            <Empty
+              description={
+                <span style={{ color: "#525252" }}>
+                  Select a board from the sidebar or create a new one.
+                </span>
+              }
+            >
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={onOpenCreateBoardModal}
+              >
+                Create Board
+              </Button>
+            </Empty>
+          </div>
         )}
       </Content>
+
       <Modal
         title={editColumn ? "Edit Column" : "Create Column"}
-        closable={{ "aria-label": "Custom Close Button" }}
+        closable={{ "aria-label": "Close" }}
         open={isModalOpen}
         onOk={handleOk}
         onCancel={handleCancel}
         confirmLoading={loading}
+        okText={editColumn ? "Save Changes" : "Create Column"}
       >
         <Input
-          placeholder="Enter Column Name"
+          autoFocus
+          placeholder="Enter column name"
           value={columnNameInput}
           onChange={(e) => setColumnNameInput(e.target.value)}
+          onPressEnter={handleOk}
         />
       </Modal>
     </>
