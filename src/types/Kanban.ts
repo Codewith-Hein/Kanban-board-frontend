@@ -1,5 +1,12 @@
 export type Priority = "LOW" | "MEDIUM" | "HIGH";
 
+export type DueFilter =
+  | "ALL"
+  | "OVERDUE"
+  | "TODAY"
+  | "THIS_WEEK"
+  | "NO_DUE_DATE";
+
 export interface BaseResponse<T> {
   status: number;
   message: string;
@@ -7,11 +14,7 @@ export interface BaseResponse<T> {
   errors: Record<string, string> | null;
 }
 
-export interface ApiErrorResponse {
-  status: number;
-  message: string;
-  errors: Record<string, string> | null;
-}
+export type ApiErrorResponse = BaseResponse<null>;
 
 export interface Task {
   taskId: number;
@@ -20,6 +23,9 @@ export interface Task {
   description: string | null;
   position: number;
   priority: Priority;
+  dueDate: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface CreateTaskRequest {
@@ -28,6 +34,7 @@ export interface CreateTaskRequest {
   position?: number;
   columnId: number;
   priority: Priority;
+  dueDate?: string | null;
 }
 
 export interface UpdateTaskRequest {
@@ -35,6 +42,7 @@ export interface UpdateTaskRequest {
   description: string;
   position: number;
   priority: Priority;
+  dueDate?: string | null;
 }
 
 export interface MoveTaskRequest {
@@ -47,6 +55,7 @@ export interface BoardColumnType {
   boardId: number;
   title: string;
   position: number;
+  completed: boolean;
   tasks: Task[];
 }
 
@@ -54,11 +63,13 @@ export interface CreateBoardColumnRequest {
   boardId: number;
   title: string;
   position: number;
+  completed?: boolean;
 }
 
 export interface UpdateBoardColumnRequest {
   title: string;
   position: number;
+  completed?: boolean;
 }
 
 export interface UpdateBoardColumnResponse {
@@ -66,6 +77,7 @@ export interface UpdateBoardColumnResponse {
   boardId?: number;
   title: string;
   position: number;
+  completed: boolean;
 }
 
 export interface BoardSummary {

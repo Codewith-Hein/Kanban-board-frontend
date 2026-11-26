@@ -9,10 +9,11 @@ import {
   Modal,
   Select,
   Spin,
+  Switch,
   Tag,
 } from "antd";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getErrorMessage } from "../api/axiosClient";
 import {
   createBoardColumn,
@@ -23,9 +24,11 @@ import { moveTask } from "../api/taskApi";
 import type {
   BoardColumnType,
   BoardDetail,
+  DueFilter,
   Priority,
   Task,
 } from "../types/Kanban";
+import { getLocalTodayString, matchesDueFilter } from "../utils/dateUtils";
 import BoardColumn from "./BoardColumn";
 
 const { Content } = Layout;
@@ -60,9 +63,36 @@ const BoardView: React.FC<BoardViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [columnNameInput, setColumnNameInput] = useState<string>("");
+  const [columnCompletedInput, setColumnCompletedInput] =
+    useState<boolean>(false);
   const [editColumn, setEditColumn] = useState<BoardColumnType | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<"ALL" | Priority>("ALL");
+  const [dueFilter, setDueFilter] = useState<DueFilter>("ALL");
+  const [todayStr, setTodayStr] = useState<string>(() => getLocalTodayString());
+
+  useEffect(() => {
+    const syncToday = () => {
+      const next = getLocalTodayString();
+      setTodayStr((prev) => (prev === next ? prev : next));
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncToday();
+      }
+    };
+
+    window.addEventListener("focus", syncToday);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(syncToday, 60_000);
+
+    return () => {
+      window.removeEventListener("focus", syncToday);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const columnList = useMemo(
     () => currentBoard?.boardColumnResponseList ?? [],
@@ -70,7 +100,9 @@ const BoardView: React.FC<BoardViewProps> = ({
   );
 
   const isFiltered =
-    searchQuery.trim().length > 0 || priorityFilter !== "ALL";
+    searchQuery.trim().length > 0 ||
+    priorityFilter !== "ALL" ||
+    dueFilter !== "ALL";
 
   const displayedColumns = useMemo(() => {
     if (!isFiltered) return columnList;
@@ -84,10 +116,16 @@ const BoardView: React.FC<BoardViewProps> = ({
           !q ||
           (task.title ?? "").toLowerCase().includes(q) ||
           (task.description ?? "").toLowerCase().includes(q);
-        return matchesPriority && matchesQuery;
+        const matchesDue = matchesDueFilter(
+          task.dueDate ?? null,
+          Boolean(col.completed),
+          dueFilter,
+          todayStr,
+        );
+        return matchesPriority && matchesQuery && matchesDue;
       }),
     }));
-  }, [columnList, isFiltered, priorityFilter, searchQuery]);
+  }, [columnList, dueFilter, isFiltered, priorityFilter, searchQuery, todayStr]);
 
   const totalTasks = useMemo(
     () =>
@@ -98,12 +136,14 @@ const BoardView: React.FC<BoardViewProps> = ({
   const openCreateColumnModal = () => {
     setEditColumn(null);
     setColumnNameInput("");
+    setColumnCompletedInput(false);
     setIsModalOpen(true);
   };
 
   const showEditModal = (column: BoardColumnType) => {
     setEditColumn(column);
     setColumnNameInput(column.title);
+    setColumnCompletedInput(Boolean(column.completed));
     setIsModalOpen(true);
   };
 
@@ -124,6 +164,7 @@ const BoardView: React.FC<BoardViewProps> = ({
   const handleCancel = () => {
     setIsModalOpen(false);
     setColumnNameInput("");
+    setColumnCompletedInput(false);
     setEditColumn(null);
   };
 
@@ -174,12 +215,18 @@ const BoardView: React.FC<BoardViewProps> = ({
         const updated = await updateBoardColumn(editColumn.columnId, {
           title: trimmedTitle,
           position: editColumn.position,
+          completed: columnCompletedInput,
         });
 
         onBoardColumnsChange((prev) =>
           prev.map((col) =>
             col.columnId === editColumn.columnId
-              ? { ...col, title: updated.title, position: updated.position }
+              ? {
+                  ...col,
+                  title: updated.title,
+                  position: updated.position,
+                  completed: updated.completed,
+                }
               : col,
           ),
         );
@@ -189,6 +236,7 @@ const BoardView: React.FC<BoardViewProps> = ({
           boardId: currentBoard.id,
           title: trimmedTitle,
           position: columnList.length + 1,
+          completed: columnCompletedInput,
         });
 
         onBoardColumnsChange((prev) => [...prev, newColumn]);
@@ -196,6 +244,7 @@ const BoardView: React.FC<BoardViewProps> = ({
       }
 
       setColumnNameInput("");
+      setColumnCompletedInput(false);
       setIsModalOpen(false);
       setEditColumn(null);
     } catch (error) {
@@ -241,6 +290,7 @@ const BoardView: React.FC<BoardViewProps> = ({
         await updateBoardColumn(columnId, {
           title: movedColumn.title,
           position: destination.index + 1,
+          completed: movedColumn.completed,
         });
       } catch (error) {
         onBoardColumnsChange(() => previousColumns);
@@ -296,10 +346,24 @@ const BoardView: React.FC<BoardViewProps> = ({
     onBoardColumnsChange(() => nextColumns);
 
     try {
-      await moveTask(taskId, {
+      const movedServerTask = await moveTask(taskId, {
         columnId: destColId,
         position: destination.index + 1,
       });
+      onBoardColumnsChange((prev) =>
+        prev.map((col) => ({
+          ...col,
+          tasks: (col.tasks || []).map((t) =>
+            t.taskId === movedServerTask.taskId
+              ? {
+                  ...t,
+                  createdAt: movedServerTask.createdAt,
+                  updatedAt: movedServerTask.updatedAt,
+                }
+              : t,
+          ),
+        })),
+      );
     } catch (error) {
       onBoardColumnsChange(() => previousColumns);
       message.error(getErrorMessage(error, "Failed to move task"));
@@ -401,6 +465,18 @@ const BoardView: React.FC<BoardViewProps> = ({
                         { value: "LOW", label: "Low Priority" },
                       ]}
                     />
+                    <Select<DueFilter>
+                      value={dueFilter}
+                      onChange={(val) => setDueFilter(val)}
+                      style={{ width: 150 }}
+                      options={[
+                        { value: "ALL", label: "All Due Dates" },
+                        { value: "OVERDUE", label: "Overdue" },
+                        { value: "TODAY", label: "Due Today" },
+                        { value: "THIS_WEEK", label: "Due This Week" },
+                        { value: "NO_DUE_DATE", label: "No Due Date" },
+                      ]}
+                    />
                   </>
                 )}
 
@@ -458,6 +534,7 @@ const BoardView: React.FC<BoardViewProps> = ({
               <DragDropContext onDragEnd={handleDragEnd}>
                 <BoardColumn
                   columnList={displayedColumns}
+                  todayStr={todayStr}
                   isDragDisabled={isFiltered}
                   editModal={showEditModal}
                   handleDelete={handleDeleteColumn}
@@ -506,13 +583,42 @@ const BoardView: React.FC<BoardViewProps> = ({
         confirmLoading={loading}
         okText={editColumn ? "Save Changes" : "Create Column"}
       >
-        <Input
-          autoFocus
-          placeholder="Enter column name"
-          value={columnNameInput}
-          onChange={(e) => setColumnNameInput(e.target.value)}
-          onPressEnter={handleOk}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Input
+            autoFocus
+            placeholder="Enter column name"
+            value={columnNameInput}
+            onChange={(e) => setColumnNameInput(e.target.value)}
+            onPressEnter={handleOk}
+          />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid #e5e5e5",
+              background: "#fafafa",
+            }}
+          >
+            <div>
+              <div
+                style={{ fontSize: 13, fontWeight: 600, color: "#0a0a0a" }}
+              >
+                Mark tasks as completed
+              </div>
+              <div style={{ fontSize: 12, color: "#737373" }}>
+                Tasks in this column won&apos;t display overdue warnings
+              </div>
+            </div>
+            <Switch
+              checked={columnCompletedInput}
+              onChange={(checked) => setColumnCompletedInput(checked)}
+            />
+          </div>
+        </div>
       </Modal>
     </>
   );

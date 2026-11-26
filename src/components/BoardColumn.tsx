@@ -1,20 +1,30 @@
 import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
   ExclamationCircleFilled,
   HolderOutlined,
   MoreOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
 import { Draggable, Droppable } from "@hello-pangea/dnd";
-import { Button, Dropdown, Input, message, Modal, Select } from "antd";
+import { Button, DatePicker, Dropdown, Input, message, Modal, Select } from "antd";
+import dayjs from "dayjs";
 import React, { useState } from "react";
 import { getErrorMessage } from "../api/axiosClient";
 import { createTask, deleteTask, updateTask } from "../api/taskApi";
 import type { BoardColumnType, Priority, Task } from "../types/Kanban";
+import {
+  formatAuditTimestamp,
+  formatDueDateLabel,
+  getTaskDueStatus,
+} from "../utils/dateUtils";
 
 const { TextArea } = Input;
 
 interface BoardColumnProps {
   columnList: BoardColumnType[];
+  todayStr: string;
   isDragDisabled?: boolean;
   editModal: (column: BoardColumnType) => void;
   handleDelete: (id: number) => void;
@@ -25,6 +35,7 @@ interface BoardColumnProps {
 
 const BoardColumn: React.FC<BoardColumnProps> = ({
   columnList,
+  todayStr,
   isDragDisabled = false,
   editModal,
   handleDelete,
@@ -39,6 +50,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
   const [priority, setPriority] = useState<Priority>("LOW");
   const [taskTitle, setTaskTitle] = useState<string>("");
   const [taskDesc, setTaskDesc] = useState<string>("");
+  const [taskDueDate, setTaskDueDate] = useState<string | null>(null);
   const [editTask, setEditTask] = useState<Task | null>(null);
 
   const handleDeleteTask = async (id: number) => {
@@ -57,6 +69,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
       description: taskDesc.trim(),
       position: taskToEdit.position,
       priority,
+      dueDate: taskDueDate,
     });
 
     handleTaskUpdate(updated);
@@ -69,6 +82,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
       description: taskDesc.trim(),
       columnId: selectedColumnId as number,
       priority,
+      dueDate: taskDueDate,
     });
 
     onTaskCreated(newTask);
@@ -80,6 +94,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
     setTaskTitle("");
     setTaskDesc("");
     setPriority("LOW");
+    setTaskDueDate(null);
     setEditTask(null);
     setSelectedColumnId(null);
   };
@@ -116,6 +131,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
     setTaskTitle(oldTask.title ?? "");
     setTaskDesc(oldTask.description ?? "");
     setPriority(oldTask.priority);
+    setTaskDueDate(oldTask.dueDate ?? null);
     setSelectedColumnId(columnId);
   };
 
@@ -126,6 +142,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
     setTaskTitle("");
     setTaskDesc("");
     setPriority("LOW");
+    setTaskDueDate(null);
   };
 
   return (
@@ -214,6 +231,15 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                           >
                             {tasks.length}
                           </span>
+                          {column.completed && (
+                            <span
+                              title="Tasks in this column are marked completed"
+                              className="kanban-column-completed-pill"
+                            >
+                              <CheckCircleOutlined style={{ fontSize: 10 }} />
+                              Done
+                            </span>
+                          )}
                         </div>
 
                         <Dropdown
@@ -271,125 +297,166 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                                 : ""
                             }`}
                           >
-                            {tasks.map((task, taskIndex) => (
-                              <Draggable
-                                key={task.taskId}
-                                draggableId={`task-${task.taskId}`}
-                                index={taskIndex}
-                                isDragDisabled={isDragDisabled}
-                              >
-                                {(taskProvided, taskSnapshot) => (
-                                  <div
-                                    ref={taskProvided.innerRef}
-                                    {...taskProvided.draggableProps}
-                                    {...taskProvided.dragHandleProps}
-                                    className={`kanban-task-card${
-                                      taskSnapshot.isDragging
-                                        ? " kanban-task-card--dragging"
-                                        : ""
-                                    }`}
-                                    style={{
-                                      ...taskProvided.draggableProps.style,
-                                      cursor: isDragDisabled
-                                        ? "default"
-                                        : "grab",
-                                    }}
-                                  >
+                            {tasks.map((task, taskIndex) => {
+                              const dueStatus = getTaskDueStatus(
+                                task.dueDate ?? null,
+                                Boolean(column.completed),
+                                todayStr,
+                              );
+
+                              return (
+                                <Draggable
+                                  key={task.taskId}
+                                  draggableId={`task-${task.taskId}`}
+                                  index={taskIndex}
+                                  isDragDisabled={isDragDisabled}
+                                >
+                                  {(taskProvided, taskSnapshot) => (
                                     <div
+                                      ref={taskProvided.innerRef}
+                                      {...taskProvided.draggableProps}
+                                      {...taskProvided.dragHandleProps}
+                                      className={`kanban-task-card${
+                                        taskSnapshot.isDragging
+                                          ? " kanban-task-card--dragging"
+                                          : ""
+                                      }`}
                                       style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "flex-start",
-                                        gap: 8,
+                                        ...taskProvided.draggableProps.style,
+                                        cursor: isDragDisabled
+                                          ? "default"
+                                          : "grab",
                                       }}
                                     >
-                                      <strong
+                                      <div
                                         style={{
-                                          color: "#0a0a0a",
-                                          fontSize: 14,
-                                          lineHeight: 1.4,
-                                          overflowWrap: "anywhere",
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "flex-start",
+                                          gap: 8,
                                         }}
                                       >
-                                        {task.title}
-                                      </strong>
-                                      <Dropdown
-                                        trigger={["click"]}
-                                        menu={{
-                                          items: [
-                                            { key: "edit", label: "Edit" },
-                                            {
-                                              key: "delete",
-                                              label: "Delete",
-                                              danger: true,
+                                        <strong
+                                          style={{
+                                            color: "#0a0a0a",
+                                            fontSize: 14,
+                                            lineHeight: 1.4,
+                                            overflowWrap: "anywhere",
+                                          }}
+                                        >
+                                          {task.title}
+                                        </strong>
+                                        <Dropdown
+                                          trigger={["click"]}
+                                          menu={{
+                                            items: [
+                                              { key: "edit", label: "Edit" },
+                                              {
+                                                key: "delete",
+                                                label: "Delete",
+                                                danger: true,
+                                              },
+                                            ],
+                                            onClick: (info) => {
+                                              info.domEvent.stopPropagation();
+                                              if (info.key === "edit") {
+                                                openEditModal(
+                                                  task,
+                                                  column.columnId,
+                                                );
+                                              } else if (
+                                                info.key === "delete"
+                                              ) {
+                                                Modal.confirm({
+                                                  title: "Delete Task",
+                                                  icon: (
+                                                    <ExclamationCircleFilled
+                                                      style={{
+                                                        color: "#0a0a0a",
+                                                      }}
+                                                    />
+                                                  ),
+                                                  content: `Are you sure you want to delete "${task.title}"?`,
+                                                  okText: "Yes, Delete",
+                                                  okType: "danger",
+                                                  cancelText: "Cancel",
+                                                  onOk: () =>
+                                                    handleDeleteTask(
+                                                      task.taskId,
+                                                    ),
+                                                });
+                                              }
                                             },
-                                          ],
-                                          onClick: (info) => {
-                                            info.domEvent.stopPropagation();
-                                            if (info.key === "edit") {
-                                              openEditModal(
-                                                task,
-                                                column.columnId,
-                                              );
-                                            } else if (info.key === "delete") {
-                                              Modal.confirm({
-                                                title: "Delete Task",
-                                                icon: (
-                                                  <ExclamationCircleFilled
-                                                    style={{ color: "#0a0a0a" }}
-                                                  />
-                                                ),
-                                                content: `Are you sure you want to delete "${task.title}"?`,
-                                                okText: "Yes, Delete",
-                                                okType: "danger",
-                                                cancelText: "Cancel",
-                                                onOk: () =>
-                                                  handleDeleteTask(task.taskId),
-                                              });
-                                            }
-                                          },
-                                        }}
-                                      >
-                                        <Button
-                                          type="text"
-                                          size="small"
-                                          aria-label={`Actions for ${task.title ?? "task"}`}
-                                          icon={<MoreOutlined />}
-                                          onClick={(e) => e.stopPropagation()}
+                                          }}
+                                        >
+                                          <Button
+                                            type="text"
+                                            size="small"
+                                            aria-label={`Actions for ${task.title ?? "task"}`}
+                                            icon={<MoreOutlined />}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                              color: "#525252",
+                                              flexShrink: 0,
+                                            }}
+                                          />
+                                        </Dropdown>
+                                      </div>
+
+                                      {task.description && (
+                                        <p
                                           style={{
                                             color: "#525252",
-                                            flexShrink: 0,
+                                            fontSize: 13,
+                                            lineHeight: 1.5,
+                                            marginTop: 6,
+                                            marginBottom: 10,
+                                            overflowWrap: "anywhere",
                                           }}
-                                        />
-                                      </Dropdown>
-                                    </div>
+                                        >
+                                          {task.description}
+                                        </p>
+                                      )}
 
-                                    {task.description && (
-                                      <p
+                                      <div
                                         style={{
-                                          color: "#525252",
-                                          fontSize: 13,
-                                          lineHeight: 1.5,
-                                          marginTop: 6,
-                                          marginBottom: 10,
-                                          overflowWrap: "anywhere",
+                                          marginTop: 8,
+                                          display: "flex",
+                                          flexWrap: "wrap",
+                                          alignItems: "center",
+                                          gap: 6,
                                         }}
                                       >
-                                        {task.description}
-                                      </p>
-                                    )}
+                                        <span
+                                          className={`kanban-priority-badge kanban-priority-badge--${task.priority}`}
+                                        >
+                                          {task.priority}
+                                        </span>
 
-                                    <div style={{ marginTop: 8 }}>
-                                      <span
-                                        className={`kanban-priority-badge kanban-priority-badge--${task.priority}`}
-                                      >
-                                        {task.priority}
-                                      </span>
+                                        {task.dueDate && dueStatus !== "NONE" && (
+                                          <span
+                                            className={`kanban-due-badge kanban-due-badge--${dueStatus.toLowerCase()}`}
+                                          >
+                                            {dueStatus === "OVERDUE" ? (
+                                              <ClockCircleOutlined />
+                                            ) : dueStatus === "COMPLETED" ? (
+                                              <CheckCircleOutlined />
+                                            ) : (
+                                              <CalendarOutlined />
+                                            )}
+                                            {formatDueDateLabel(
+                                              task.dueDate,
+                                              dueStatus,
+                                              todayStr,
+                                            )}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
+                                  )}
+                                </Draggable>
+                              );
+                            })}
                             {tasksProvided.placeholder}
                           </div>
                         )}
@@ -440,16 +507,54 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
             onChange={(e) => setTaskDesc(e.target.value)}
           />
 
-          <Select<Priority>
-            value={priority}
-            onChange={(value) => setPriority(value)}
-            style={{ width: "100%" }}
-            options={[
-              { value: "LOW", label: "Low Priority" },
-              { value: "MEDIUM", label: "Medium Priority" },
-              { value: "HIGH", label: "High Priority" },
-            ]}
-          />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
+            }}
+          >
+            <Select<Priority>
+              value={priority}
+              onChange={(value) => setPriority(value)}
+              style={{ width: "100%" }}
+              options={[
+                { value: "LOW", label: "Low Priority" },
+                { value: "MEDIUM", label: "Medium Priority" },
+                { value: "HIGH", label: "High Priority" },
+              ]}
+            />
+
+            <DatePicker
+              allowClear
+              format="YYYY-MM-DD"
+              placeholder="Due date (optional)"
+              style={{ width: "100%" }}
+              value={taskDueDate ? dayjs(taskDueDate, "YYYY-MM-DD") : null}
+              onChange={(date) =>
+                setTaskDueDate(date ? date.format("YYYY-MM-DD") : null)
+              }
+            />
+          </div>
+
+          {editTask && (
+            <div
+              style={{
+                marginTop: 2,
+                paddingTop: 10,
+                borderTop: "1px solid #efefef",
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "space-between",
+                gap: 8,
+                fontSize: 12,
+                color: "#737373",
+              }}
+            >
+              <span>Created: {formatAuditTimestamp(editTask.createdAt)}</span>
+              <span>Updated: {formatAuditTimestamp(editTask.updatedAt)}</span>
+            </div>
+          )}
         </div>
       </Modal>
     </>
